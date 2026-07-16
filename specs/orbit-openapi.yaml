@@ -1,0 +1,413 @@
+openapi: 3.1.0
+info:
+  title: Orbit Memory Protocol
+  version: 0.1.0
+  description: Open API surface for portable AI memory.
+servers:
+  - url: https://api.example.com/orbit/v1
+security:
+  - bearerAuth: []
+paths:
+  /memories:
+    post:
+      operationId: createMemory
+      summary: Create a memory object.
+      description: The server binds owner identity from the bearer auth context; clients must not supply ownerId.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMemoryRequest"
+      responses:
+        "201":
+          description: Created memory.
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/orbit-memory.schema.json
+    get:
+      operationId: listMemories
+      summary: List memory objects in the authenticated user's namespace.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Memory page.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMemoriesResponse"
+  /memories/{memoryId}:
+    get:
+      operationId: getMemory
+      summary: Get one memory object.
+      parameters:
+        - name: memoryId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Memory object.
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/orbit-memory.schema.json
+  /evidence/search:
+    post:
+      operationId: searchEvidence
+      summary: Search evidence chunks in the authenticated user's namespace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchEvidenceRequest"
+      responses:
+        "200":
+          description: Ranked evidence chunks.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchEvidenceResponse"
+  /user-memories:
+    get:
+      operationId: listUserMemories
+      summary: List durable user memories.
+      responses:
+        "200":
+          description: User memories.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListUserMemoriesResponse"
+  /user-memories/{memoryId}:
+    delete:
+      operationId: deleteUserMemory
+      summary: Delete a durable user memory.
+      parameters:
+        - name: memoryId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted.
+  /auth/qr/sessions:
+    post:
+      operationId: createQrAuthSession
+      summary: Create a QR auth session for browser extension or companion app login.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQrAuthSessionRequest"
+      responses:
+        "201":
+          description: QR auth session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QrAuthSession"
+  /auth/qr/sessions/{sessionId}:
+    get:
+      operationId: pollQrAuthSession
+      summary: Poll a QR auth session.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: QR auth result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QrAuthResult"
+  /auth/qr/sessions/{sessionId}/authorize:
+    post:
+      operationId: authorizeQrAuthSession
+      summary: Authorize a pending QR auth session.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QrAuthCodeRequest"
+      responses:
+        "200":
+          description: QR auth result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QrAuthResult"
+  /auth/qr/sessions/{sessionId}/cancel:
+    post:
+      operationId: cancelQrAuthSession
+      summary: Cancel a pending QR auth session.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QrAuthCodeRequest"
+      responses:
+        "200":
+          description: QR auth result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QrAuthResult"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    OrbitResource:
+      $ref: ./schemas/orbit-resource.schema.json
+    OrbitMemoryObject:
+      $ref: ./schemas/orbit-memory.schema.json
+    OrbitEvidenceChunk:
+      $ref: ./schemas/orbit-evidence.schema.json
+    OrbitUserMemory:
+      $ref: ./schemas/orbit-user-memory.schema.json
+    CreateMemoryRequest:
+      type: object
+      required: [source]
+      additionalProperties: false
+      properties:
+        title: { type: [string, "null"] }
+        summary: { type: [string, "null"] }
+        note: { type: [string, "null"] }
+        source:
+          $ref: "#/components/schemas/OrbitSource"
+        content:
+          $ref: "#/components/schemas/OrbitMemoryContent"
+        tags:
+          type: array
+          items: { type: string }
+        entities:
+          $ref: "#/components/schemas/OrbitEntitySet"
+        resources:
+          type: array
+          items:
+            $ref: ./schemas/orbit-resource.schema.json
+        privacy:
+          $ref: "#/components/schemas/OrbitMemoryPrivacy"
+        status:
+          type: string
+          enum: [pending, processing, completed, degraded, failed]
+        metadata:
+          type: object
+          additionalProperties: true
+    OrbitSource:
+      type: object
+      required: [type]
+      additionalProperties: true
+      properties:
+        type:
+          type: string
+          enum: [url, text, image, audio, video, file, note, quote, event]
+        url: { type: string }
+        text: { type: string }
+        mimeType: { type: string }
+        platform: { type: string }
+        capturedAt: { type: string, format: date-time }
+        raw:
+          type: object
+          additionalProperties: true
+    OrbitMemoryContent:
+      type: object
+      additionalProperties: false
+      properties:
+        text: { type: string }
+        caption: { type: string }
+        transcript: { type: string }
+    OrbitEntitySet:
+      type: object
+      additionalProperties:
+        type: array
+        items: { type: string }
+      properties:
+        people:
+          type: array
+          items: { type: string }
+        organizations:
+          type: array
+          items: { type: string }
+        places:
+          type: array
+          items: { type: string }
+        topics:
+          type: array
+          items: { type: string }
+    OrbitMemoryPrivacy:
+      type: object
+      required: [scope]
+      additionalProperties: false
+      properties:
+        scope:
+          type: string
+          enum: [private, shared, public]
+        redaction:
+          type: array
+          items: { type: string }
+    ListMemoriesResponse:
+      type: object
+      required: [memories]
+      additionalProperties: false
+      properties:
+        memories:
+          type: array
+          items:
+            $ref: ./schemas/orbit-memory.schema.json
+        nextCursor:
+          type: [string, "null"]
+    ListUserMemoriesResponse:
+      type: object
+      required: [memories]
+      additionalProperties: false
+      properties:
+        memories:
+          type: array
+          items:
+            $ref: ./schemas/orbit-user-memory.schema.json
+    SearchEvidenceRequest:
+      type: object
+      required: [query]
+      additionalProperties: false
+      properties:
+        query: { type: string, minLength: 1 }
+        limit: { type: integer, minimum: 1, maximum: 50, default: 10 }
+        includeVectors: { type: boolean, default: false }
+        filters:
+          type: object
+          additionalProperties: false
+          properties:
+            memoryIds:
+              type: array
+              items: { type: string }
+            category: { type: string }
+            tags:
+              type: array
+              items: { type: string }
+            sourceTypes:
+              type: array
+              items:
+                type: string
+                enum: [url, text, image, audio, video, file, note, quote, event]
+            entities:
+              type: object
+              additionalProperties:
+                type: array
+                items: { type: string }
+            createdAfter: { type: string, format: date-time }
+            createdBefore: { type: string, format: date-time }
+    SearchEvidenceResponse:
+      type: object
+      required: [results]
+      additionalProperties: false
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [item, score]
+            additionalProperties: false
+            properties:
+              item:
+                $ref: ./schemas/orbit-evidence.schema.json
+              score: { type: number }
+              semanticScore: { type: number }
+              keywordScore: { type: number }
+    CreateQrAuthSessionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        client:
+          type: object
+          additionalProperties: false
+          properties:
+            type: { type: string }
+            name: { type: string }
+            extensionId: { type: string }
+            platform: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+    QrAuthStatus:
+      type: string
+      enum: [pending, authorized, expired, cancelled, consumed]
+    QrAuthSession:
+      type: object
+      required: [schemaVersion, sessionId, code, status, verificationUri, verificationUriComplete, expiresAt]
+      additionalProperties: false
+      properties:
+        schemaVersion: { const: orbit.auth.qr_session.v0 }
+        sessionId: { type: string }
+        code: { type: string }
+        status:
+          $ref: "#/components/schemas/QrAuthStatus"
+        verificationUri: { type: string }
+        verificationUriComplete: { type: string }
+        qrImageUrl: { type: string }
+        expiresAt: { type: string, format: date-time }
+        pollAfterMs: { type: integer, minimum: 0 }
+    QrAuthCodeRequest:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code: { type: string }
+    QrAuthResult:
+      type: object
+      required: [schemaVersion, sessionId, status]
+      additionalProperties: false
+      properties:
+        schemaVersion: { const: orbit.auth.qr_result.v0 }
+        sessionId: { type: string }
+        status:
+          $ref: "#/components/schemas/QrAuthStatus"
+        user:
+          type: ["object", "null"]
+          additionalProperties: false
+          properties:
+            uid: { type: string }
+            email: { type: string }
+            displayName: { type: string }
+            photoURL: { type: string }
+        token:
+          type: object
+          additionalProperties: false
+          properties:
+            tokenType:
+              type: string
+              enum: [firebase_custom_token, bearer]
+            customToken: { type: string }
+            accessToken: { type: string }
+            refreshToken: { type: string }
+            expiresIn: { type: integer, minimum: 0 }
+            expiresAt: { type: string, format: date-time }

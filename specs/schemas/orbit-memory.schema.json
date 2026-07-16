@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbit-memory.dev/schemas/orbit-memory.schema.json",
+  "title": "OrbitMemoryObject",
+  "type": "object",
+  "required": ["schemaVersion", "id", "ownerId", "source", "createdAt"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "orbit.memory.v0" },
+    "id": { "type": "string", "minLength": 1 },
+    "ownerId": { "type": "string", "minLength": 1 },
+    "title": { "type": ["string", "null"] },
+    "summary": { "type": ["string", "null"] },
+    "note": { "type": ["string", "null"] },
+    "source": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["url", "text", "image", "audio", "video", "file", "note", "quote", "event"]
+        },
+        "url": { "type": "string" },
+        "text": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "platform": { "type": "string" },
+        "capturedAt": { "type": "string", "format": "date-time" },
+        "raw": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "caption": { "type": "string" },
+        "transcript": { "type": "string" }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "entities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "properties": {
+        "people": { "type": "array", "items": { "type": "string" } },
+        "organizations": { "type": "array", "items": { "type": "string" } },
+        "places": { "type": "array", "items": { "type": "string" } },
+        "topics": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": { "$ref": "./orbit-resource.schema.json" }
+    },
+    "privacy": {
+      "type": "object",
+      "required": ["scope"],
+      "additionalProperties": false,
+      "properties": {
+        "scope": { "type": "string", "enum": ["private", "shared", "public"] },
+        "redaction": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "status": { "type": "string", "enum": ["pending", "processing", "completed", "degraded", "failed"] },
+    "metadata": { "type": "object", "additionalProperties": true },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

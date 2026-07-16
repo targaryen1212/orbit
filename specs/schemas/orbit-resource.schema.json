@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbit-memory.dev/schemas/orbit-resource.schema.json",
+  "title": "OrbitResource",
+  "type": "object",
+  "required": ["name", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string", "minLength": 1 },
+    "type": { "type": "string", "minLength": 1 },
+    "searchQuery": { "type": "string" },
+    "url": { "type": "string" },
+    "geo": {
+      "type": "object",
+      "required": ["latitude", "longitude"],
+      "additionalProperties": false,
+      "properties": {
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "precision": {
+          "type": "string",
+          "enum": ["exact", "approximate", "city", "region", "unknown"]
+        },
+        "source": { "type": "string" }
+      }
+    },
+    "address": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string" },
+        "street": { "type": "string" },
+        "locality": { "type": "string" },
+        "region": { "type": "string" },
+        "postalCode": { "type": "string" },
+        "country": { "type": "string" },
+        "countryCode": { "type": "string" }
+      }
+    },
+    "metadata": { "type": "object", "additionalProperties": true }
+  }
+}

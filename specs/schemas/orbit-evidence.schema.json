@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbit-memory.dev/schemas/orbit-evidence.schema.json",
+  "title": "OrbitEvidenceChunk",
+  "type": "object",
+  "required": ["schemaVersion", "id", "ownerId", "memoryId", "kind", "text", "sourceFields"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "orbit.evidence.v0" },
+    "id": { "type": "string" },
+    "ownerId": { "type": "string" },
+    "memoryId": { "type": "string" },
+    "kind": {
+      "type": "string",
+      "enum": ["summary", "note", "caption", "transcript", "body", "resource", "entity", "location", "event", "custom"]
+    },
+    "text": { "type": "string", "minLength": 1 },
+    "sourceFields": { "type": "array", "items": { "type": "string" } },
+    "embedding": {
+      "type": "object",
+      "required": ["model", "dimensions", "vector"],
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string" },
+        "dimensions": { "type": "integer", "minimum": 1 },
+        "vector": { "type": "array", "items": { "type": "number" } },
+        "normalized": { "type": "boolean" }
+      }
+    },
+    "category": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "entities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "resources": { "type": "array", "items": { "$ref": "./orbit-resource.schema.json" } },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "memoryCreatedAt": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object", "additionalProperties": true }
+  }
+}

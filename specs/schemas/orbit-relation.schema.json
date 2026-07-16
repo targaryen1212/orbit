@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbit-memory.dev/schemas/orbit-relation.schema.json",
+  "title": "OrbitRelation",
+  "type": "object",
+  "required": ["schemaVersion", "id", "ownerId", "fromMemoryId", "toMemoryId", "relationType", "strength", "signals"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "orbit.relation.v0" },
+    "id": { "type": "string" },
+    "ownerId": { "type": "string" },
+    "fromMemoryId": { "type": "string" },
+    "toMemoryId": { "type": "string" },
+    "relationType": { "type": "string", "enum": ["semantic", "entity", "temporal", "coactivation", "manual", "mixed"] },
+    "strength": { "type": "number", "minimum": 0, "maximum": 1 },
+    "signals": {
+      "type": "object",
+      "additionalProperties": { "type": "number" },
+      "properties": {
+        "semantic": { "type": "number" },
+        "entityOverlap": { "type": "number" },
+        "temporal": { "type": "number" },
+        "coActivation": { "type": "number" }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object", "additionalProperties": true }
+  }
+}
