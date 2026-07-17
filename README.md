@@ -9,8 +9,7 @@ data contract and SDK can be shared.
 
 ## Data model
 
-- `MemoryObject`: one saved item. The name is retained in the API for
-  compatibility.
+- `OrbitItem`: one saved item.
 - `EvidenceChunk`: searchable text derived from a saved item.
 - `Entity`: a person, place, organization, or topic found in an item.
 - `Resource`: a structured item such as a book, place, song, movie, or product.

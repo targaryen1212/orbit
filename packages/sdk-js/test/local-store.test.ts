@@ -11,14 +11,14 @@ describe("LocalOrbitStore", () => {
   it("searches only inside the requested owner namespace", async () => {
     const store = new LocalOrbitStore();
 
-    const rajMemory = await putIndexedMemory(store, {
+    const rajItem = await putIndexedItem(store, {
       ownerId: "user_raj",
       title: "Tokyo cafe",
       summary: "A quiet cafe in Shimokitazawa with matcha lattes.",
       tags: ["tokyo", "cafe"],
       entities: { places: ["Tokyo"] },
     });
-    const alexMemory = await putIndexedMemory(store, {
+    const alexItem = await putIndexedItem(store, {
       ownerId: "user_alex",
       title: "Berlin cafe",
       summary: "A quiet cafe in Kreuzberg with late hours.",
@@ -41,14 +41,14 @@ describe("LocalOrbitStore", () => {
     assert(alexResults.length > 0);
     assert(rajResults.every((result) => result.item.ownerId === "user_raj"));
     assert(alexResults.every((result) => result.item.ownerId === "user_alex"));
-    assert(rajResults.every((result) => result.item.itemId !== alexMemory.id));
-    assert(alexResults.every((result) => result.item.itemId !== rajMemory.id));
+    assert(rajResults.every((result) => result.item.itemId !== alexItem.id));
+    assert(alexResults.every((result) => result.item.itemId !== rajItem.id));
   });
 
   it("applies tag, entity, source type, category, and created-at filters", async () => {
     const store = new LocalOrbitStore();
 
-    const travelMemory = await putIndexedMemory(store, {
+    const travelItem = await putIndexedItem(store, {
       ownerId: "user_raj",
       title: "Tokyo itinerary",
       summary: "A slow travel guide for quiet Tokyo cafes.",
@@ -58,7 +58,7 @@ describe("LocalOrbitStore", () => {
       metadata: { category: "travel" },
       createdAt: "2026-01-10T00:00:00.000Z",
     });
-    await putIndexedMemory(store, {
+    await putIndexedItem(store, {
       ownerId: "user_raj",
       title: "Ramen note",
       summary: "A food note about ramen near Shinjuku.",
@@ -84,12 +84,12 @@ describe("LocalOrbitStore", () => {
     });
 
     assert(results.length > 0);
-    assert(results.every((result) => result.item.itemId === travelMemory.id));
+    assert(results.every((result) => result.item.itemId === travelItem.id));
   });
 
-  it("does not index source fields listed in memory privacy redaction", async () => {
+  it("does not index source fields listed in item privacy redaction", async () => {
     const store = new LocalOrbitStore();
-    const memory = await store.putItem({
+    const item = await store.putItem({
       ownerId: "user_raj",
       source: { type: "text", text: "public launch notes" },
       title: "Launch notes",
@@ -104,7 +104,7 @@ describe("LocalOrbitStore", () => {
       },
     });
 
-    const chunks = await store.indexItem(memory.id, memory.ownerId);
+    const chunks = await store.indexItem(item.id, item.ownerId);
     const redactedResults = await store.searchEvidence({
       ownerId: "user_raj",
       query: "harbor-secret-token vault-passphrase",
@@ -131,8 +131,8 @@ describe("OrbitClient", () => {
       "https://api.example.com/orbit/v1"
     );
     assert.equal(
-      normalizeOrbitBaseUrl("https://api.example.com/custom", "/memory/v2"),
-      "https://api.example.com/custom/memory/v2"
+      normalizeOrbitBaseUrl("https://api.example.com/custom", "/item/v2"),
+      "https://api.example.com/custom/item/v2"
     );
     assert.equal(
       normalizeOrbitBaseUrl("https://api.example.com/custom/", false),
@@ -149,7 +149,7 @@ describe("OrbitClient", () => {
         if (String(url).endsWith("/items?limit=2")) return jsonResponse({ items: [] });
         return jsonResponse({
           schemaVersion: "orbit.item.v0",
-          id: "mem_1",
+          id: "item_1",
           ownerId: "user_from_auth",
           source: { type: "text", text: "created by authenticated user" },
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -169,13 +169,13 @@ describe("OrbitClient", () => {
   });
 });
 
-async function putIndexedMemory(
+async function putIndexedItem(
   store: LocalOrbitStore,
   input: Partial<Parameters<LocalOrbitStore["putItem"]>[0]> & Pick<OrbitItem, "ownerId">
 ): Promise<OrbitItem> {
-  const memory = await store.putItem({
+  const item = await store.putItem({
     ownerId: input.ownerId,
-    source: input.source ?? { type: "text", text: input.summary ?? input.title ?? "Local memory" },
+    source: input.source ?? { type: "text", text: input.summary ?? input.title ?? "Local item" },
     title: input.title,
     summary: input.summary,
     tags: input.tags,
@@ -183,8 +183,8 @@ async function putIndexedMemory(
     metadata: input.metadata,
     createdAt: input.createdAt,
   });
-  await store.indexItem(memory.id, memory.ownerId);
-  return memory;
+  await store.indexItem(item.id, item.ownerId);
+  return item;
 }
 
 function jsonResponse(body: unknown): Response {
