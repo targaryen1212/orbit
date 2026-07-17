@@ -40,11 +40,11 @@ test("bookmark ingestion keeps private V2 routes inside the SDK", async () => {
     sourceHost: "example.com",
     displayTitle: "Story",
     platformDisplayName: "web",
-    category: "bookmark",
     type: "url",
     isTextOnly: false,
     details: { searchableText: "Story" },
   });
+  assert.equal("category" in JSON.parse(String(requests[0]?.init.body)), false);
   assert.equal(requests[1]?.url, "https://api.example.com/v2/bookmarks/existence");
   assert.deepEqual([...existing], ["https://example.com/already"]);
 });

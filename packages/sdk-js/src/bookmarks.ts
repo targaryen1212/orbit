@@ -56,7 +56,6 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
         displayTitle: memory.title || defaultTitle(memory),
         previewText: memory.summary || memory.content?.caption || memory.content?.text || memory.note,
         platformDisplayName: sourcePlatform,
-        category: "bookmark",
         type: memory.source.type,
         mediaKind: mediaKind(memory),
         isTextOnly: ["text", "note", "quote"].includes(memory.source.type),

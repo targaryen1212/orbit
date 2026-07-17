@@ -56,6 +56,9 @@ stable key from their normalized request content. Reusing the same request
 object safely retries text and local-file captures while separate request
 objects remain separate captures.
 
+Bookmark writes leave `category` unset so the Orbb processing pipeline can
+classify each saved item from its content instead of assigning a generic label.
+
 QR sign-in keeps the private code in a POST body. A completed QR session can
 deliver credentials once; later polls return `consumed` without a token. When
 signing out, revoke the authenticated extension session before clearing the
