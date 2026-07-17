@@ -25,6 +25,8 @@ export function createOrbitBookmarksApi(config: {
 }
 
 class OrbitBookmarksClient implements OrbitBookmarksApi {
+  private readonly captureKeys = new WeakMap<CreateOrbitMemoryRequest, string>();
+
   constructor(
     private readonly request: JsonRequest,
     private readonly fetch: TimedFetch,
@@ -32,8 +34,9 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
   ) {}
 
   async createMemory(memory: CreateOrbitMemoryRequest): Promise<unknown> {
+    const operationKey = await this.operationKey(memory);
     const media = localMedia(memory);
-    const primaryMediaId = media ? await this.uploadMedia(media) : undefined;
+    const primaryMediaId = media ? await this.uploadMedia(media, operationKey) : undefined;
     const sourceUrl = firstHttpUrl(memory.source.url, stringMetadata(memory.metadata, "sourcePageUrl"));
     const sourcePlatform = memory.source.platform?.trim() || host(sourceUrl) || "orbit";
     const searchableText = [memory.title, memory.summary, memory.note, memory.content?.text, memory.content?.caption]
@@ -43,7 +46,7 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
 
     return this.request("/bookmarks", {
       method: "POST",
-      headers: { "idempotency-key": stringMetadata(memory.metadata, "idempotencyKey") || crypto.randomUUID() },
+      headers: { "idempotency-key": operationKey },
       body: JSON.stringify(withoutUndefined({
         sourcePlatform,
         sourcePermalinkUrl: sourceUrl,
@@ -68,6 +71,38 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
     });
   }
 
+  private async operationKey(memory: CreateOrbitMemoryRequest): Promise<string> {
+    const explicitKey = stringMetadata(memory.metadata, "idempotencyKey")?.trim();
+    if (explicitKey) return explicitKey;
+
+    const sourceUrl = firstHttpUrl(memory.source.url, stringMetadata(memory.metadata, "sourcePageUrl"));
+    if (sourceUrl) {
+      const metadata = withoutKey(memory.metadata, "idempotencyKey");
+      if (metadata && typeof metadata.sourcePageUrl === "string" && /^https?:\/\//i.test(metadata.sourcePageUrl)) {
+        metadata.sourcePageUrl = normalizeHttpUrl(metadata.sourcePageUrl);
+      }
+      const normalizedMemory = {
+        ...memory,
+        source: {
+          ...memory.source,
+          url: normalizeHttpUrl(sourceUrl),
+          // Capture time is observational metadata, not source identity. A
+          // social sync rebuilt after a timeout must still replay the same
+          // URL operation instead of producing a new key every run.
+          capturedAt: undefined,
+        },
+        metadata,
+      };
+      return `orbit:url:${await sha256(stableJson(normalizedMemory))}`;
+    }
+
+    const existing = this.captureKeys.get(memory);
+    if (existing) return existing;
+    const captureKey = `orbit:capture:${crypto.randomUUID()}`;
+    this.captureKeys.set(memory, captureKey);
+    return captureKey;
+  }
+
   async findExistingUrls(urls: string[]): Promise<Set<string>> {
     const existing = new Set<string>();
     const uniqueUrls = [...new Set(urls)];
@@ -81,11 +116,11 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
     return existing;
   }
 
-  private async uploadMedia(media: LocalMedia): Promise<string> {
-    const clientRequestId = crypto.randomUUID();
+  private async uploadMedia(media: LocalMedia, operationKey: string): Promise<string> {
+    const clientRequestId = await stageKey(operationKey, "media");
     const upload = await this.request<{ data: { mediaObjectId: string; uploadUrl: string } }>("/media/upload-url", {
       method: "POST",
-      headers: { "idempotency-key": crypto.randomUUID() },
+      headers: { "idempotency-key": await stageKey(operationKey, "upload") },
       body: JSON.stringify({
         role: media.role,
         mimeType: media.blob.type || "application/octet-stream",
@@ -103,7 +138,7 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
 
     await this.request("/media/finalize", {
       method: "POST",
-      headers: { "idempotency-key": crypto.randomUUID() },
+      headers: { "idempotency-key": await stageKey(operationKey, "finalize") },
       body: JSON.stringify({ mediaObjectId: upload.data.mediaObjectId, slot: media.role, clientRequestId }),
     });
     return upload.data.mediaObjectId;
@@ -143,6 +178,49 @@ function dataUrlToBlob(value: string): Blob {
 
 function firstHttpUrl(...values: Array<string | undefined>): string | undefined {
   return values.find((value) => value && /^https?:\/\//i.test(value));
+}
+
+function normalizeHttpUrl(value: string): string {
+  const url = new URL(value);
+  url.hash = "";
+  const entries = [...url.searchParams.entries()].sort(([leftKey, leftValue], [rightKey, rightValue]) =>
+    leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue),
+  );
+  url.search = "";
+  for (const [key, itemValue] of entries) url.searchParams.append(key, itemValue);
+  return url.toString();
+}
+
+function withoutKey(value: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
+  if (!value) return undefined;
+  const copy = { ...value };
+  delete copy[key];
+  return Object.keys(copy).length > 0 ? copy : undefined;
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(sortJson(value));
+}
+
+function sortJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, itemValue]) => itemValue !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, itemValue]) => [key, sortJson(itemValue)]),
+  );
+}
+
+async function stageKey(operationKey: string, stage: string): Promise<string> {
+  return `orbit:${stage}:${await sha256(operationKey)}`;
+}
+
+async function sha256(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function host(value?: string): string | undefined {

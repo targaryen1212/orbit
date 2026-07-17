@@ -49,6 +49,27 @@ const existing = await client.bookmarks.findExistingUrls([
 ]);
 ```
 
+Bookmark and media writes include stable stage-specific idempotency keys. Set
+`metadata.idempotencyKey` when the caller already has a durable capture ID; it
+is used unchanged for the bookmark create. URL captures otherwise derive a
+stable key from their normalized request content. Reusing the same request
+object safely retries text and local-file captures while separate request
+objects remain separate captures.
+
+QR sign-in keeps the private code in a POST body. A completed QR session can
+deliver credentials once; later polls return `consumed` without a token. When
+signing out, revoke the authenticated extension session before clearing the
+local credential.
+
+```ts
+const session = await client.auth.qr.create({
+  client: { type: "chrome_extension", extensionId: chrome.runtime.id },
+});
+const result = await client.auth.qr.waitForAuthorization(session);
+
+await client.auth.revokeCurrentSession();
+```
+
 `OrbitClient` appends `/orbit/v1` by default and avoids duplicating it when the
 base URL already includes the protocol path. Use `apiPath: false` for fully
 custom routes, or pass a custom `apiPath` such as `/memory/v2`.

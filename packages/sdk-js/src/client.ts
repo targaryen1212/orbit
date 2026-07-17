@@ -2,6 +2,7 @@ import type {
   CreateOrbitMemoryRequest,
   OrbitEvidenceChunk,
   OrbitEvidenceSearchInput,
+  OrbitExtensionAuthRevokeResult,
   OrbitMemoryObject,
   OrbitQrAuthPollInput,
   OrbitQrAuthResult,
@@ -90,18 +91,24 @@ export class OrbitClient {
   };
 
   auth = {
+    revokeCurrentSession: () =>
+      this.request<OrbitExtensionAuthRevokeResult>("/auth/extension/revoke", {
+        method: "POST",
+      }),
     qr: {
       create: (input: CreateOrbitQrAuthSessionInput = {}) =>
         this.request<OrbitQrAuthSession>("/auth/qr/sessions", {
           method: "POST",
           body: JSON.stringify(input),
         }),
-      poll: ({ sessionId, code }: OrbitQrAuthPollInput) => {
-        const params = new URLSearchParams({ code });
-        return this.request<OrbitQrAuthResult>(
-          `/auth/qr/sessions/${encodeURIComponent(sessionId)}?${params.toString()}`
-        );
-      },
+      poll: ({ sessionId, code }: OrbitQrAuthPollInput) =>
+        this.request<OrbitQrAuthResult>(
+          `/auth/qr/sessions/${encodeURIComponent(sessionId)}`,
+          {
+            method: "POST",
+            body: JSON.stringify({ code }),
+          }
+        ),
       authorize: ({ sessionId, code }: OrbitQrAuthPollInput) =>
         this.request<OrbitQrAuthResult>(
           `/auth/qr/sessions/${encodeURIComponent(sessionId)}/authorize`,

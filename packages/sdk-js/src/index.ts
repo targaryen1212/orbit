@@ -22,6 +22,7 @@ export type {
   OrbitEvidenceChunk,
   OrbitEvidenceKind,
   OrbitEvidenceSearchInput,
+  OrbitExtensionAuthRevokeResult,
   OrbitGeoPoint,
   OrbitAddress,
   OrbitId,

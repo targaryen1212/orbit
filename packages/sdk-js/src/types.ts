@@ -258,6 +258,10 @@ export interface OrbitQrAuthResult {
   token?: OrbitQrAuthToken;
 }
 
+export interface OrbitExtensionAuthRevokeResult {
+  status: "revoked";
+}
+
 export interface OrbitQrAuthPollInput {
   sessionId: string;
   code: string;
