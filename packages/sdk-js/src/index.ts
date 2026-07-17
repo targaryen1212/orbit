@@ -6,18 +6,10 @@ export {
   buildEvidenceChunks,
   isRedactedSource,
 } from "./local-store.js";
-export {
-  cosineSimilarity,
-  createDeterministicEmbeddingProvider,
-  keywordScore,
-  normalizeVector,
-} from "./embeddings.js";
-export type { OrbitEmbeddingProvider } from "./embeddings.js";
 export type {
-  CreateOrbitMemoryInput,
-  CreateOrbitMemoryRequest,
+  CreateOrbitItemInput,
+  CreateOrbitItemRequest,
   CreateOrbitQrAuthSessionInput,
-  OrbitEmbedding,
   OrbitEntitySet,
   OrbitEvidenceChunk,
   OrbitEvidenceKind,
@@ -26,7 +18,9 @@ export type {
   OrbitGeoPoint,
   OrbitAddress,
   OrbitId,
-  OrbitMemoryObject,
+  OrbitItem,
+  OrbitItemContent,
+  OrbitItemStatus,
   OrbitQrAuthClientInfo,
   OrbitQrAuthPollInput,
   OrbitQrAuthResult,
@@ -43,5 +37,5 @@ export type {
   OrbitSourceType,
   OrbitStore,
   OrbitTimestamp,
-  OrbitUserMemory,
+  OrbitUserFact,
 } from "./types.js";

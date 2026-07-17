@@ -1,21 +1,21 @@
 # Orbb Adapter Plan
 
-Orbit should begin as a compatibility layer over the existing Orbb backend.
+Orbit begins as a stable client contract over the existing Orbb backend.
 
 ## Source Data
 
-Current Orbb collections map cleanly to Orbit:
+The existing Orbb collections map to the current Orbit type names:
 
-- `users/{uid}/bookmarks/{id}` -> `OrbitMemoryObject`
+- `users/{uid}/bookmarks/{id}` -> `OrbitItem`
 - `users/{uid}/evidenceChunks/{id}` -> `OrbitEvidenceChunk`
 - `users/{uid}/resources/{type}/items/{id}` -> `OrbitResource`
-- `users/{uid}/orbbMemory/{id}` -> `OrbitUserMemory`
+- `users/{uid}/orbbMemory/{id}` -> `OrbitUserFact`
 - `users/{uid}/synapses/{id}` -> `OrbitRelation`
 
 ## First Backend Step
 
-Add a new `/orbit/v1` router next to the current public API. Keep the current
-API stable, and make Orbit the portable contract.
+Add a new `/orbit/v1` router next to the current public API without changing
+existing Orbb routes.
 
 ```txt
 nextraCloud/functions/src/
@@ -26,10 +26,10 @@ nextraCloud/functions/src/
 ## Serializer Targets
 
 ```txt
-sanitizeBookmark -> toOrbitMemoryObject
+sanitizeBookmark -> toOrbitItem
 sanitizeEvidenceChunk -> toOrbitEvidenceChunk
 resource doc -> toOrbitResource
-orbbMemory doc -> toOrbitUserMemory
+orbbMemory doc -> toOrbitUserFact
 synapse edge -> toOrbitRelation
 ```
 

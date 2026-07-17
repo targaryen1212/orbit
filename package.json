@@ -1,8 +1,8 @@
 {
-  "name": "orbit-memory-protocol",
-  "version": "0.1.0",
+  "name": "orbit-protocol",
+  "version": "0.3.0",
   "private": true,
-  "description": "Open protocol and SDK for portable AI memory.",
+  "description": "Schemas and a TypeScript SDK for user-owned saved content.",
   "license": "MIT",
   "type": "module",
   "workspaces": [
@@ -13,7 +13,7 @@
     "build": "npm run build --workspaces --if-present",
     "check": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "example:local": "npm -w @orbit-memory/example-local run start"
+    "example:local": "npm -w @orbb/orbit-example run start"
   },
   "devDependencies": {
     "tsx": "^4.20.6",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://orbit-memory.dev/schemas/orbit-resource.schema.json",
+  "$id": "https://orbit.dev/schemas/orbit-resource.schema.json",
   "title": "OrbitResource",
   "type": "object",
   "required": ["name", "type"],

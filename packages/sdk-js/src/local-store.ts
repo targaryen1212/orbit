@@ -1,38 +1,27 @@
 import type {
-  CreateOrbitMemoryInput,
+  CreateOrbitItemInput,
   OrbitEvidenceChunk,
   OrbitEvidenceKind,
   OrbitEvidenceSearchInput,
-  OrbitMemoryObject,
+  OrbitItem,
   OrbitSearchHit,
   OrbitStore,
-  OrbitUserMemory,
+  OrbitUserFact,
 } from "./types.js";
-import type { OrbitEmbeddingProvider } from "./embeddings.js";
-import { cosineSimilarity, keywordScore } from "./embeddings.js";
-import { chunkText, createOrbitId, nowIso, stableHash, uniqueStrings } from "./utils.js";
+import { chunkText, createOrbitId, nowIso, stableHash, tokenize, uniqueStrings } from "./utils.js";
 
-interface LocalOrbitStoreOptions {
-  embeddingProvider?: OrbitEmbeddingProvider;
-}
-
-type MemoryBucket<T> = Map<string, Map<string, T>>;
+type OwnerBucket<T> = Map<string, Map<string, T>>;
 
 export class LocalOrbitStore implements OrbitStore {
-  private readonly memories: MemoryBucket<OrbitMemoryObject> = new Map();
-  private readonly evidenceChunks: MemoryBucket<OrbitEvidenceChunk> = new Map();
-  private readonly userMemories: MemoryBucket<OrbitUserMemory> = new Map();
-  private readonly embeddingProvider?: OrbitEmbeddingProvider;
+  private readonly items: OwnerBucket<OrbitItem> = new Map();
+  private readonly evidenceChunks: OwnerBucket<OrbitEvidenceChunk> = new Map();
+  private readonly userFacts: OwnerBucket<OrbitUserFact> = new Map();
 
-  constructor(options: LocalOrbitStoreOptions = {}) {
-    this.embeddingProvider = options.embeddingProvider;
-  }
-
-  async putMemory(input: CreateOrbitMemoryInput | OrbitMemoryObject): Promise<OrbitMemoryObject> {
+  async putItem(input: CreateOrbitItemInput | OrbitItem): Promise<OrbitItem> {
     const now = nowIso();
-    const memory: OrbitMemoryObject = {
-      schemaVersion: "orbit.memory.v0",
-      id: input.id ?? createOrbitId("mem"),
+    const item: OrbitItem = {
+      schemaVersion: "orbit.item.v0",
+      id: input.id ?? createOrbitId("item"),
       ownerId: input.ownerId,
       title: input.title ?? null,
       summary: input.summary ?? null,
@@ -49,25 +38,25 @@ export class LocalOrbitStore implements OrbitStore {
       updatedAt: now,
     };
 
-    this.bucket(this.memories, memory.ownerId).set(memory.id, memory);
-    return memory;
+    this.bucket(this.items, item.ownerId).set(item.id, item);
+    return item;
   }
 
-  async getMemory(memoryId: string, ownerId: string): Promise<OrbitMemoryObject | null> {
-    return this.bucket(this.memories, ownerId).get(memoryId) ?? null;
+  async getItem(itemId: string, ownerId: string): Promise<OrbitItem | null> {
+    return this.bucket(this.items, ownerId).get(itemId) ?? null;
   }
 
-  async listMemories(ownerId: string, options: { limit?: number } = {}): Promise<OrbitMemoryObject[]> {
+  async listItems(ownerId: string, options: { limit?: number } = {}): Promise<OrbitItem[]> {
     const limit = options.limit ?? 50;
-    return [...this.bucket(this.memories, ownerId).values()]
+    return [...this.bucket(this.items, ownerId).values()]
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit);
   }
 
-  async indexMemory(memoryId: string, ownerId: string): Promise<OrbitEvidenceChunk[]> {
-    const memory = await this.getMemory(memoryId, ownerId);
-    if (!memory) throw new Error(`Memory not found: ${memoryId}`);
-    const chunks = await buildEvidenceChunks(memory, this.embeddingProvider);
+  async indexItem(itemId: string, ownerId: string): Promise<OrbitEvidenceChunk[]> {
+    const item = await this.getItem(itemId, ownerId);
+    if (!item) throw new Error(`Item not found: ${itemId}`);
+    const chunks = await buildEvidenceChunks(item);
     return this.putEvidenceChunks(chunks);
   }
 
@@ -75,15 +64,6 @@ export class LocalOrbitStore implements OrbitStore {
     const written: OrbitEvidenceChunk[] = [];
     for (const chunk of chunks) {
       const next = { ...chunk };
-      if (!next.embedding && this.embeddingProvider) {
-        const vector = await this.embeddingProvider.embed(next.text);
-        next.embedding = {
-          model: this.embeddingProvider.model,
-          dimensions: this.embeddingProvider.dimensions,
-          vector,
-          normalized: true,
-        };
-      }
       this.bucket(this.evidenceChunks, next.ownerId).set(next.id, next);
       written.push(next);
     }
@@ -92,21 +72,17 @@ export class LocalOrbitStore implements OrbitStore {
 
   async searchEvidence(input: OrbitEvidenceSearchInput): Promise<Array<OrbitSearchHit<OrbitEvidenceChunk>>> {
     const limit = input.limit ?? 10;
-    const queryVector = this.embeddingProvider ? await this.embeddingProvider.embed(input.query) : null;
-    const memorySourceType = await this.sourceTypeLookup(input.ownerId);
+    const itemSourceType = await this.sourceTypeLookup(input.ownerId);
 
     const hits = [...this.bucket(this.evidenceChunks, input.ownerId).values()]
-      .filter((chunk) => this.matchesFilters(chunk, input, memorySourceType))
+      .filter((chunk) => this.matchesFilters(chunk, input, itemSourceType))
       .map((chunk) => {
-        const semanticScore = this.semanticScore(queryVector, chunk);
         const keyword = keywordScore(input.query, [
           chunk.text,
           ...(chunk.tags ?? []),
           ...Object.values(chunk.entities ?? {}).flat(),
         ].join(" "));
-        const score = semanticScore > 0 ? semanticScore * 0.78 + keyword * 0.22 : keyword;
-        const item = input.includeVectors ? chunk : stripVector(chunk);
-        return { item, score, semanticScore, keywordScore: keyword };
+        return { item: chunk, score: keyword, keywordScore: keyword };
       })
       .filter((hit) => hit.score > 0)
       .sort((left, right) => right.score - left.score)
@@ -115,16 +91,16 @@ export class LocalOrbitStore implements OrbitStore {
     return hits;
   }
 
-  async upsertUserMemory(
-    input: Omit<OrbitUserMemory, "schemaVersion" | "id" | "createdAt"> & {
+  async upsertUserFact(
+    input: Omit<OrbitUserFact, "schemaVersion" | "id" | "createdAt"> & {
       id?: string;
       createdAt?: string;
     }
-  ): Promise<OrbitUserMemory> {
+  ): Promise<OrbitUserFact> {
     const now = nowIso();
-    const memory: OrbitUserMemory = {
-      schemaVersion: "orbit.user_memory.v0",
-      id: input.id ?? createOrbitId("usrmem"),
+    const fact: OrbitUserFact = {
+      schemaVersion: "orbit.user_fact.v0",
+      id: input.id ?? createOrbitId("fact"),
       ownerId: input.ownerId,
       content: input.content,
       source: input.source,
@@ -134,23 +110,23 @@ export class LocalOrbitStore implements OrbitStore {
       createdAt: input.createdAt ?? now,
       updatedAt: now,
     };
-    this.bucket(this.userMemories, input.ownerId).set(memory.id, memory);
-    return memory;
+    this.bucket(this.userFacts, input.ownerId).set(fact.id, fact);
+    return fact;
   }
 
-  async listUserMemories(ownerId: string, options: { limit?: number } = {}): Promise<OrbitUserMemory[]> {
+  async listUserFacts(ownerId: string, options: { limit?: number } = {}): Promise<OrbitUserFact[]> {
     const limit = options.limit ?? 50;
-    return [...this.bucket(this.userMemories, ownerId).values()]
-      .filter((memory) => memory.status !== "deleted")
+    return [...this.bucket(this.userFacts, ownerId).values()]
+      .filter((fact) => fact.status !== "deleted")
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit);
   }
 
-  async deleteUserMemory(memoryId: string, ownerId: string): Promise<boolean> {
-    return this.bucket(this.userMemories, ownerId).delete(memoryId);
+  async deleteUserFact(factId: string, ownerId: string): Promise<boolean> {
+    return this.bucket(this.userFacts, ownerId).delete(factId);
   }
 
-  private bucket<T>(store: MemoryBucket<T>, ownerId: string): Map<string, T> {
+  private bucket<T>(store: OwnerBucket<T>, ownerId: string): Map<string, T> {
     const existing = store.get(ownerId);
     if (existing) return existing;
     const next = new Map<string, T>();
@@ -160,31 +136,24 @@ export class LocalOrbitStore implements OrbitStore {
 
   private async sourceTypeLookup(ownerId: string): Promise<Map<string, string>> {
     const lookup = new Map<string, string>();
-    for (const memory of await this.listMemories(ownerId, { limit: Number.MAX_SAFE_INTEGER })) {
-      lookup.set(memory.id, memory.source.type);
+    for (const item of await this.listItems(ownerId, { limit: Number.MAX_SAFE_INTEGER })) {
+      lookup.set(item.id, item.source.type);
     }
     return lookup;
-  }
-
-  private semanticScore(queryVector: number[] | null, chunk: OrbitEvidenceChunk): number {
-    if (!queryVector || !chunk.embedding || !this.embeddingProvider) return 0;
-    if (chunk.embedding.model !== this.embeddingProvider.model) return 0;
-    if (chunk.embedding.dimensions !== this.embeddingProvider.dimensions) return 0;
-    return Math.max(0, cosineSimilarity(queryVector, chunk.embedding.vector));
   }
 
   private matchesFilters(
     chunk: OrbitEvidenceChunk,
     input: OrbitEvidenceSearchInput,
-    memorySourceType: Map<string, string>
+    itemSourceType: Map<string, string>
   ): boolean {
     const filters = input.filters;
     if (!filters) return true;
-    if (filters.memoryIds && !filters.memoryIds.includes(chunk.memoryId)) return false;
+    if (filters.itemIds && !filters.itemIds.includes(chunk.itemId)) return false;
     if (filters.category && chunk.category !== filters.category) return false;
-    if (filters.createdAfter && chunk.memoryCreatedAt && chunk.memoryCreatedAt < filters.createdAfter) return false;
-    if (filters.createdBefore && chunk.memoryCreatedAt && chunk.memoryCreatedAt > filters.createdBefore) return false;
-    if (filters.sourceTypes && !filters.sourceTypes.includes(memorySourceType.get(chunk.memoryId) as never)) return false;
+    if (filters.createdAfter && chunk.itemCreatedAt && chunk.itemCreatedAt < filters.createdAfter) return false;
+    if (filters.createdBefore && chunk.itemCreatedAt && chunk.itemCreatedAt > filters.createdBefore) return false;
+    if (filters.sourceTypes && !filters.sourceTypes.includes(itemSourceType.get(chunk.itemId) as never)) return false;
     if (filters.tags) {
       const chunkTags = new Set(chunk.tags ?? []);
       if (!filters.tags.every((tag) => chunkTags.has(tag))) return false;
@@ -202,8 +171,7 @@ export class LocalOrbitStore implements OrbitStore {
 }
 
 export async function buildEvidenceChunks(
-  memory: OrbitMemoryObject,
-  embeddingProvider?: OrbitEmbeddingProvider
+  item: OrbitItem
 ): Promise<OrbitEvidenceChunk[]> {
   const rawChunks: Array<{
     kind: OrbitEvidenceKind;
@@ -211,20 +179,20 @@ export async function buildEvidenceChunks(
     sourceFields: string[];
   }> = [];
 
-  addRawChunk(rawChunks, "summary", [memory.title, memory.summary].filter(Boolean).join("\n"), ["title", "summary"]);
-  addRawChunk(rawChunks, "note", memory.note ?? "", ["note"]);
-  addRawChunk(rawChunks, "body", memory.content?.text ?? memory.source.text ?? "", ["content.text", "source.text"]);
-  addRawChunk(rawChunks, "caption", memory.content?.caption ?? "", ["content.caption"]);
+  addRawChunk(rawChunks, "summary", [item.title, item.summary].filter(Boolean).join("\n"), ["title", "summary"]);
+  addRawChunk(rawChunks, "note", item.note ?? "", ["note"]);
+  addRawChunk(rawChunks, "body", item.content?.text ?? item.source.text ?? "", ["content.text", "source.text"]);
+  addRawChunk(rawChunks, "caption", item.content?.caption ?? "", ["content.caption"]);
 
-  for (const [index, part] of chunkText(memory.content?.transcript ?? "").entries()) {
+  for (const [index, part] of chunkText(item.content?.transcript ?? "").entries()) {
     addRawChunk(rawChunks, "transcript", `Transcript part ${index + 1}: ${part}`, ["content.transcript"]);
   }
 
-  if (memory.resources && memory.resources.length > 0) {
+  if (item.resources && item.resources.length > 0) {
     addRawChunk(
       rawChunks,
       "resource",
-      memory.resources.map((resource) => {
+      item.resources.map((resource) => {
         const geo = resource.geo ?
           `${resource.geo.latitude},${resource.geo.longitude}` :
           undefined;
@@ -241,11 +209,11 @@ export async function buildEvidenceChunks(
     );
   }
 
-  if (memory.entities) {
+  if (item.entities) {
     addRawChunk(
       rawChunks,
       "entity",
-      Object.entries(memory.entities)
+      Object.entries(item.entities)
         .filter(([, values]) => values && values.length > 0)
         .map(([type, values]) => `${type}: ${values?.join(", ")}`)
         .join("\n"),
@@ -255,34 +223,25 @@ export async function buildEvidenceChunks(
 
   const chunks: OrbitEvidenceChunk[] = [];
   for (const raw of rawChunks) {
-    if (isRedactedSource(raw.sourceFields, memory.privacy?.redaction)) continue;
+    if (isRedactedSource(raw.sourceFields, item.privacy?.redaction)) continue;
 
     const clean = raw.text.replace(/\s+/g, " ").trim().slice(0, 1800);
     const chunk: OrbitEvidenceChunk = {
       schemaVersion: "orbit.evidence.v0",
-      id: `chunk_${memory.id}_${raw.kind}_${stableHash(clean).toString(36)}`,
-      ownerId: memory.ownerId,
-      memoryId: memory.id,
+      id: `chunk_${item.id}_${raw.kind}_${stableHash(clean).toString(36)}`,
+      ownerId: item.ownerId,
+      itemId: item.id,
       kind: raw.kind,
       text: clean,
       sourceFields: raw.sourceFields,
-      category: typeof memory.metadata?.category === "string" ? memory.metadata.category : undefined,
-      tags: memory.tags ?? [],
-      entities: memory.entities,
-      resources: memory.resources,
+      category: typeof item.metadata?.category === "string" ? item.metadata.category : undefined,
+      tags: item.tags ?? [],
+      entities: item.entities,
+      resources: item.resources,
       createdAt: nowIso(),
-      memoryCreatedAt: memory.createdAt,
+      itemCreatedAt: item.createdAt,
     };
 
-    if (embeddingProvider) {
-      const vector = await embeddingProvider.embed(clean);
-      chunk.embedding = {
-        model: embeddingProvider.model,
-        dimensions: embeddingProvider.dimensions,
-        vector,
-        normalized: true,
-      };
-    }
     chunks.push(chunk);
   }
   return chunks;
@@ -309,8 +268,13 @@ function addRawChunk(
   chunks.push({ kind, text: clean, sourceFields });
 }
 
-function stripVector(chunk: OrbitEvidenceChunk): OrbitEvidenceChunk {
-  if (!chunk.embedding) return chunk;
-  const { embedding: _embedding, ...rest } = chunk;
-  return rest;
+function keywordScore(query: string, text: string): number {
+  const queryTerms = new Set(tokenize(query));
+  if (queryTerms.size === 0) return 0;
+  const textTerms = new Set(tokenize(text));
+  let hits = 0;
+  for (const term of queryTerms) {
+    if (textTerms.has(term)) hits += 1;
+  }
+  return hits / queryTerms.size;
 }

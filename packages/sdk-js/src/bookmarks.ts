@@ -1,4 +1,4 @@
-import type { CreateOrbitMemoryRequest } from "./types.js";
+import type { CreateOrbitItemRequest } from "./types.js";
 
 const DEFAULT_UPLOAD_TIMEOUT_MS = 90_000;
 
@@ -6,8 +6,8 @@ type JsonRequest = <T>(path: string, init: RequestInit) => Promise<T>;
 type TimedFetch = (input: RequestInfo | URL, init: RequestInit, timeoutMs: number) => Promise<Response>;
 
 export interface OrbitBookmarksApi {
-  /** Save a protocol memory through Orbit's bookmark ingestion workflow. */
-  createMemory(memory: CreateOrbitMemoryRequest): Promise<unknown>;
+  /** Save content through Orbit's bookmark ingestion workflow. */
+  createItem(item: CreateOrbitItemRequest): Promise<unknown>;
   /** Return canonical source URLs already stored by the authenticated user. */
   findExistingUrls(urls: string[]): Promise<Set<string>>;
 }
@@ -25,7 +25,7 @@ export function createOrbitBookmarksApi(config: {
 }
 
 class OrbitBookmarksClient implements OrbitBookmarksApi {
-  private readonly captureKeys = new WeakMap<CreateOrbitMemoryRequest, string>();
+  private readonly captureKeys = new WeakMap<CreateOrbitItemRequest, string>();
 
   constructor(
     private readonly request: JsonRequest,
@@ -33,13 +33,13 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
     private readonly uploadTimeoutMs: number,
   ) {}
 
-  async createMemory(memory: CreateOrbitMemoryRequest): Promise<unknown> {
-    const operationKey = await this.operationKey(memory);
-    const media = localMedia(memory);
+  async createItem(item: CreateOrbitItemRequest): Promise<unknown> {
+    const operationKey = await this.operationKey(item);
+    const media = localMedia(item);
     const primaryMediaId = media ? await this.uploadMedia(media, operationKey) : undefined;
-    const sourceUrl = firstHttpUrl(memory.source.url, stringMetadata(memory.metadata, "sourcePageUrl"));
-    const sourcePlatform = memory.source.platform?.trim() || host(sourceUrl) || "orbit";
-    const searchableText = [memory.title, memory.summary, memory.note, memory.content?.text, memory.content?.caption]
+    const sourceUrl = firstHttpUrl(item.source.url, stringMetadata(item.metadata, "sourcePageUrl"));
+    const sourcePlatform = item.source.platform?.trim() || host(sourceUrl) || "orbit";
+    const searchableText = [item.title, item.summary, item.note, item.content?.text, item.content?.caption]
       .filter((value): value is string => Boolean(value?.trim()))
       .join("\n")
       .slice(0, 20_000);
@@ -53,37 +53,37 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
         sourceOriginalSharedUrl: sourceUrl,
         sourceCanonicalUrl: sourceUrl,
         sourceHost: host(sourceUrl),
-        displayTitle: memory.title || defaultTitle(memory),
-        previewText: memory.summary || memory.content?.caption || memory.content?.text || memory.note,
+        displayTitle: item.title || defaultTitle(item),
+        previewText: item.summary || item.content?.caption || item.content?.text || item.note,
         platformDisplayName: sourcePlatform,
-        type: memory.source.type,
-        mediaKind: mediaKind(memory),
-        isTextOnly: ["text", "note", "quote"].includes(memory.source.type),
+        type: item.source.type,
+        mediaKind: mediaKind(item),
+        isTextOnly: ["text", "note", "quote"].includes(item.source.type),
         primaryMediaId,
-        tags: memory.tags?.slice(0, 12),
+        tags: item.tags?.slice(0, 12),
         details: {
-          caption: memory.content?.caption,
-          userNote: memory.note,
+          caption: item.content?.caption,
+          userNote: item.note,
           searchableText: searchableText || undefined,
         },
       })),
     });
   }
 
-  private async operationKey(memory: CreateOrbitMemoryRequest): Promise<string> {
-    const explicitKey = stringMetadata(memory.metadata, "idempotencyKey")?.trim();
+  private async operationKey(item: CreateOrbitItemRequest): Promise<string> {
+    const explicitKey = stringMetadata(item.metadata, "idempotencyKey")?.trim();
     if (explicitKey) return explicitKey;
 
-    const sourceUrl = firstHttpUrl(memory.source.url, stringMetadata(memory.metadata, "sourcePageUrl"));
+    const sourceUrl = firstHttpUrl(item.source.url, stringMetadata(item.metadata, "sourcePageUrl"));
     if (sourceUrl) {
-      const metadata = withoutKey(memory.metadata, "idempotencyKey");
+      const metadata = withoutKey(item.metadata, "idempotencyKey");
       if (metadata && typeof metadata.sourcePageUrl === "string" && /^https?:\/\//i.test(metadata.sourcePageUrl)) {
         metadata.sourcePageUrl = normalizeHttpUrl(metadata.sourcePageUrl);
       }
-      const normalizedMemory = {
-        ...memory,
+      const normalizedItem = {
+        ...item,
         source: {
-          ...memory.source,
+          ...item.source,
           url: normalizeHttpUrl(sourceUrl),
           // Capture time is observational metadata, not source identity. A
           // social sync rebuilt after a timeout must still replay the same
@@ -92,13 +92,13 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
         },
         metadata,
       };
-      return `orbit:url:${await sha256(stableJson(normalizedMemory))}`;
+      return `orbit:url:${await sha256(stableJson(normalizedItem))}`;
     }
 
-    const existing = this.captureKeys.get(memory);
+    const existing = this.captureKeys.get(item);
     if (existing) return existing;
     const captureKey = `orbit:capture:${crypto.randomUUID()}`;
-    this.captureKeys.set(memory, captureKey);
+    this.captureKeys.set(item, captureKey);
     return captureKey;
   }
 
@@ -149,23 +149,23 @@ interface LocalMedia {
   role: "primary" | "voice_note" | "file" | "video";
 }
 
-function localMedia(memory: CreateOrbitMemoryRequest): LocalMedia | null {
-  const raw = memory.source.raw;
+function localMedia(item: CreateOrbitItemRequest): LocalMedia | null {
+  const raw = item.source.raw;
   if (!raw) return null;
   const encoded = [raw.dataUrl, raw.fileData, raw.audioData].find((value): value is string =>
     typeof value === "string" && value.startsWith("data:"),
   );
   if (!encoded) return null;
   const blob = dataUrlToBlob(encoded);
-  const role = memory.source.type === "audio" ? "voice_note" :
-    memory.source.type === "video" ? "video" :
-      memory.source.type === "file" ? "file" : "primary";
+  const role = item.source.type === "audio" ? "voice_note" :
+    item.source.type === "video" ? "video" :
+      item.source.type === "file" ? "file" : "primary";
   return { blob, role };
 }
 
 function dataUrlToBlob(value: string): Blob {
   const comma = value.indexOf(",");
-  if (comma < 0) throw new Error("Memory media data is invalid.");
+  if (comma < 0) throw new Error("Saved media data is invalid.");
   const header = value.slice(5, comma);
   const mimeType = header.split(";")[0] || "application/octet-stream";
   const encoded = value.slice(comma + 1);
@@ -230,12 +230,12 @@ function stringMetadata(value: Record<string, unknown> | undefined, key: string)
   return typeof value?.[key] === "string" ? value[key] : undefined;
 }
 
-function mediaKind(memory: CreateOrbitMemoryRequest): string | undefined {
-  return ["image", "audio", "video", "file"].includes(memory.source.type) ? memory.source.type : undefined;
+function mediaKind(item: CreateOrbitItemRequest): string | undefined {
+  return ["image", "audio", "video", "file"].includes(item.source.type) ? item.source.type : undefined;
 }
 
-function defaultTitle(memory: CreateOrbitMemoryRequest): string {
-  return memory.source.type === "quote" ? "Saved quote" : `Saved ${memory.source.type}`;
+function defaultTitle(item: CreateOrbitItemRequest): string {
+  return item.source.type === "quote" ? "Saved quote" : `Saved ${item.source.type}`;
 }
 
 function withoutUndefined<T>(value: T): T {

@@ -1,6 +1,6 @@
 {
-  "name": "@orbit-memory/example-local",
-  "version": "0.1.0",
+  "name": "@orbb/orbit-example",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@orbit-memory/sdk": "file:../../packages/sdk-js"
+    "@orbb/orbit-sdk": "file:../../packages/sdk-js"
   }
 }

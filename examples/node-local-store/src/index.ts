@@ -1,13 +1,8 @@
-import {
-  LocalOrbitStore,
-  createDeterministicEmbeddingProvider,
-} from "@orbit-memory/sdk";
+import { LocalOrbitStore } from "@orbb/orbit-sdk";
 
-const store = new LocalOrbitStore({
-  embeddingProvider: createDeterministicEmbeddingProvider(),
-});
+const store = new LocalOrbitStore();
 
-const rajCafe = await store.putMemory({
+const rajCafe = await store.putItem({
   ownerId: "user_raj",
   source: {
     type: "url",
@@ -42,7 +37,7 @@ const rajCafe = await store.putMemory({
   ],
 });
 
-const rajRamen = await store.putMemory({
+const rajRamen = await store.putItem({
   ownerId: "user_raj",
   source: {
     type: "text",
@@ -57,7 +52,7 @@ const rajRamen = await store.putMemory({
   },
 });
 
-const alexBike = await store.putMemory({
+const alexBike = await store.putItem({
   ownerId: "user_alex",
   source: {
     type: "url",
@@ -74,9 +69,9 @@ const alexBike = await store.putMemory({
 });
 
 await Promise.all([
-  store.indexMemory(rajCafe.id, rajCafe.ownerId),
-  store.indexMemory(rajRamen.id, rajRamen.ownerId),
-  store.indexMemory(alexBike.id, alexBike.ownerId),
+  store.indexItem(rajCafe.id, rajCafe.ownerId),
+  store.indexItem(rajRamen.id, rajRamen.ownerId),
+  store.indexItem(alexBike.id, alexBike.ownerId),
 ]);
 
 const rajResults = await store.searchEvidence({
@@ -93,16 +88,16 @@ const alexResults = await store.searchEvidence({
 
 console.log("Raj namespace results:");
 for (const result of rajResults) {
-  console.log(`- ${result.item.memoryId} | ${result.item.kind} | score=${result.score.toFixed(3)}`);
+  console.log(`- ${result.item.itemId} | ${result.item.kind} | score=${result.score.toFixed(3)}`);
   console.log(`  ${result.item.text}`);
 }
 
 console.log("\nAlex namespace results:");
 for (const result of alexResults) {
-  console.log(`- ${result.item.memoryId} | ${result.item.kind} | score=${result.score.toFixed(3)}`);
+  console.log(`- ${result.item.itemId} | ${result.item.kind} | score=${result.score.toFixed(3)}`);
   console.log(`  ${result.item.text}`);
 }
 
-console.log("\nSame embedding provider, separate namespaces:");
-console.log("- user_raj searched only user_raj evidence chunks");
-console.log("- user_alex searched only user_alex evidence chunks");
+console.log("\nSeparate owner namespaces:");
+console.log("- user_raj searched only user_raj evidence records");
+console.log("- user_alex searched only user_alex evidence records");

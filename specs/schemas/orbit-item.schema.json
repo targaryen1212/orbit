@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://orbit-memory.dev/schemas/orbit-memory.schema.json",
-  "title": "OrbitMemoryObject",
+  "$id": "https://orbit.dev/schemas/orbit-item.schema.json",
+  "title": "OrbitItem",
   "type": "object",
   "required": ["schemaVersion", "id", "ownerId", "source", "createdAt"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": "orbit.memory.v0" },
+    "schemaVersion": { "const": "orbit.item.v0" },
     "id": { "type": "string", "minLength": 1 },
     "ownerId": { "type": "string", "minLength": 1 },
     "title": { "type": ["string", "null"] },

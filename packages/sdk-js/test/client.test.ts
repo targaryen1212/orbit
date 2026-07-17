@@ -18,7 +18,7 @@ test("bookmark ingestion keeps private V2 routes inside the SDK", async () => {
     },
   });
 
-  await client.bookmarks.createMemory({
+  await client.bookmarks.createItem({
     source: { type: "url", url: "https://example.com/story", platform: "web" },
     title: "Story",
     metadata: { idempotencyKey: "capture-1" },
@@ -66,7 +66,7 @@ test("bookmark ingestion uploads and finalizes local media through the SDK", asy
     },
   });
 
-  await client.bookmarks.createMemory({
+  await client.bookmarks.createItem({
     source: {
       type: "image",
       platform: "chrome",
@@ -128,7 +128,7 @@ test("equivalent URL capture requests derive the same stable create identity", a
     },
   });
 
-  await client.bookmarks.createMemory({
+  await client.bookmarks.createItem({
     source: {
       type: "url",
       url: "https://EXAMPLE.com/story?b=2&a=1#section",
@@ -137,7 +137,7 @@ test("equivalent URL capture requests derive the same stable create identity", a
     },
     title: "Story",
   });
-  await client.bookmarks.createMemory({
+  await client.bookmarks.createItem({
     title: "Story",
     source: {
       platform: "web",
@@ -163,9 +163,9 @@ test("text captures retry stably without collapsing separate capture objects", a
   });
   const capture = { source: { type: "text" as const, text: "Remember this" } };
 
-  await client.bookmarks.createMemory(capture);
-  await client.bookmarks.createMemory(capture);
-  await client.bookmarks.createMemory({ source: { type: "text", text: "Remember this" } });
+  await client.bookmarks.createItem(capture);
+  await client.bookmarks.createItem(capture);
+  await client.bookmarks.createItem({ source: { type: "text", text: "Remember this" } });
 
   assert.match(keys[0] ?? "", /^orbit:capture:[0-9a-f-]{36}$/);
   assert.equal(keys[1], keys[0]);
@@ -194,8 +194,8 @@ test("media retries reuse stable upload, finalize, and create identities", async
     },
   };
 
-  await client.bookmarks.createMemory(capture);
-  await client.bookmarks.createMemory(capture);
+  await client.bookmarks.createItem(capture);
+  await client.bookmarks.createItem(capture);
 
   const mutationRequests = requests.filter(({ url }) => url !== "https://uploads.example.com/signed");
   const firstKeys = mutationRequests.slice(0, 3).map(({ init }) =>

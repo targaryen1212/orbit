@@ -1,16 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://orbit-memory.dev/schemas/orbit-relation.schema.json",
+  "$id": "https://orbit.dev/schemas/orbit-relation.schema.json",
   "title": "OrbitRelation",
   "type": "object",
-  "required": ["schemaVersion", "id", "ownerId", "fromMemoryId", "toMemoryId", "relationType", "strength", "signals"],
+  "required": ["schemaVersion", "id", "ownerId", "fromItemId", "toItemId", "relationType", "strength", "signals"],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": { "const": "orbit.relation.v0" },
     "id": { "type": "string" },
     "ownerId": { "type": "string" },
-    "fromMemoryId": { "type": "string" },
-    "toMemoryId": { "type": "string" },
+    "fromItemId": { "type": "string" },
+    "toItemId": { "type": "string" },
     "relationType": { "type": "string", "enum": ["semantic", "entity", "temporal", "coactivation", "manual", "mixed"] },
     "strength": { "type": "number", "minimum": 0, "maximum": 1 },
     "signals": {

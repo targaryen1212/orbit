@@ -1,18 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  createDeterministicEmbeddingProvider,
   LocalOrbitStore,
   OrbitClient,
   normalizeOrbitBaseUrl,
 } from "../src/index.js";
-import type { OrbitMemoryObject } from "../src/index.js";
+import type { OrbitItem } from "../src/index.js";
 
 describe("LocalOrbitStore", () => {
   it("searches only inside the requested owner namespace", async () => {
-    const store = new LocalOrbitStore({
-      embeddingProvider: createDeterministicEmbeddingProvider(),
-    });
+    const store = new LocalOrbitStore();
 
     const rajMemory = await putIndexedMemory(store, {
       ownerId: "user_raj",
@@ -44,14 +41,12 @@ describe("LocalOrbitStore", () => {
     assert(alexResults.length > 0);
     assert(rajResults.every((result) => result.item.ownerId === "user_raj"));
     assert(alexResults.every((result) => result.item.ownerId === "user_alex"));
-    assert(rajResults.every((result) => result.item.memoryId !== alexMemory.id));
-    assert(alexResults.every((result) => result.item.memoryId !== rajMemory.id));
+    assert(rajResults.every((result) => result.item.itemId !== alexMemory.id));
+    assert(alexResults.every((result) => result.item.itemId !== rajMemory.id));
   });
 
   it("applies tag, entity, source type, category, and created-at filters", async () => {
-    const store = new LocalOrbitStore({
-      embeddingProvider: createDeterministicEmbeddingProvider(),
-    });
+    const store = new LocalOrbitStore();
 
     const travelMemory = await putIndexedMemory(store, {
       ownerId: "user_raj",
@@ -89,39 +84,12 @@ describe("LocalOrbitStore", () => {
     });
 
     assert(results.length > 0);
-    assert(results.every((result) => result.item.memoryId === travelMemory.id));
-  });
-
-  it("omits embeddings by default and includes them when requested", async () => {
-    const store = new LocalOrbitStore({
-      embeddingProvider: createDeterministicEmbeddingProvider(),
-    });
-    await putIndexedMemory(store, {
-      ownerId: "user_raj",
-      title: "Vector privacy",
-      summary: "A searchable memory with embeddings.",
-      tags: ["vectors"],
-    });
-
-    const redacted = await store.searchEvidence({
-      ownerId: "user_raj",
-      query: "searchable embeddings",
-    });
-    const withVectors = await store.searchEvidence({
-      ownerId: "user_raj",
-      query: "searchable embeddings",
-      includeVectors: true,
-    });
-
-    assert(redacted.length > 0);
-    assert(withVectors.length > 0);
-    assert.equal(redacted[0].item.embedding, undefined);
-    assert.equal(withVectors[0].item.embedding?.model, "orbit/dev-hash-embedding-v0");
+    assert(results.every((result) => result.item.itemId === travelMemory.id));
   });
 
   it("does not index source fields listed in memory privacy redaction", async () => {
     const store = new LocalOrbitStore();
-    const memory = await store.putMemory({
+    const memory = await store.putItem({
       ownerId: "user_raj",
       source: { type: "text", text: "public launch notes" },
       title: "Launch notes",
@@ -136,7 +104,7 @@ describe("LocalOrbitStore", () => {
       },
     });
 
-    const chunks = await store.indexMemory(memory.id, memory.ownerId);
+    const chunks = await store.indexItem(memory.id, memory.ownerId);
     const redactedResults = await store.searchEvidence({
       ownerId: "user_raj",
       query: "harbor-secret-token vault-passphrase",
@@ -153,45 +121,6 @@ describe("LocalOrbitStore", () => {
     assert(noteResults.length > 0);
   });
 
-  it("does not compare vectors from incompatible embedding providers", async () => {
-    const store = new LocalOrbitStore({
-      embeddingProvider: createDeterministicEmbeddingProvider({
-        model: "orbit/query-model",
-        dimensions: 8,
-      }),
-    });
-    const incompatibleProvider = createDeterministicEmbeddingProvider({
-      model: "orbit/index-model",
-      dimensions: 8,
-    });
-    const vector = await incompatibleProvider.embed("semantic only phrase");
-
-    await store.putEvidenceChunks([
-      {
-        schemaVersion: "orbit.evidence.v0",
-        id: "chunk_manual_incompatible",
-        ownerId: "user_raj",
-        memoryId: "mem_manual",
-        kind: "custom",
-        text: "semantic only phrase",
-        sourceFields: ["manual"],
-        embedding: {
-          model: incompatibleProvider.model,
-          dimensions: incompatibleProvider.dimensions,
-          vector,
-          normalized: true,
-        },
-      },
-    ]);
-
-    const results = await store.searchEvidence({
-      ownerId: "user_raj",
-      query: "missing-term",
-      includeVectors: true,
-    });
-
-    assert.deepEqual(results, []);
-  });
 });
 
 describe("OrbitClient", () => {
@@ -211,15 +140,15 @@ describe("OrbitClient", () => {
     );
   });
 
-  it("requests memories through the default /orbit/v1 path", async () => {
+  it("requests items through the default /orbit/v1 path", async () => {
     const requests: Array<{ url: string; body?: string | null }> = [];
     const client = new OrbitClient({
       baseUrl: "https://api.example.com",
       fetch: (async (url, init) => {
         requests.push({ url: String(url), body: init?.body?.toString() });
-        if (String(url).endsWith("/memories?limit=2")) return jsonResponse({ memories: [] });
+        if (String(url).endsWith("/items?limit=2")) return jsonResponse({ items: [] });
         return jsonResponse({
-          schemaVersion: "orbit.memory.v0",
+          schemaVersion: "orbit.item.v0",
           id: "mem_1",
           ownerId: "user_from_auth",
           source: { type: "text", text: "created by authenticated user" },
@@ -228,23 +157,23 @@ describe("OrbitClient", () => {
       }) as typeof fetch,
     });
 
-    await client.memories.list({ limit: 2 });
-    await client.memories.create({
+    await client.items.list({ limit: 2 });
+    await client.items.create({
       source: { type: "text", text: "created by authenticated user" },
-      summary: "No ownerId in the public create DTO.",
+      summary: "The server supplies the owner from authentication.",
     });
 
-    assert.equal(requests[0].url, "https://api.example.com/orbit/v1/memories?limit=2");
-    assert.equal(requests[1].url, "https://api.example.com/orbit/v1/memories");
+    assert.equal(requests[0].url, "https://api.example.com/orbit/v1/items?limit=2");
+    assert.equal(requests[1].url, "https://api.example.com/orbit/v1/items");
     assert(!JSON.parse(requests[1].body ?? "{}").ownerId);
   });
 });
 
 async function putIndexedMemory(
   store: LocalOrbitStore,
-  input: Partial<Parameters<LocalOrbitStore["putMemory"]>[0]> & Pick<OrbitMemoryObject, "ownerId">
-): Promise<OrbitMemoryObject> {
-  const memory = await store.putMemory({
+  input: Partial<Parameters<LocalOrbitStore["putItem"]>[0]> & Pick<OrbitItem, "ownerId">
+): Promise<OrbitItem> {
+  const memory = await store.putItem({
     ownerId: input.ownerId,
     source: input.source ?? { type: "text", text: input.summary ?? input.title ?? "Local memory" },
     title: input.title,
@@ -254,7 +183,7 @@ async function putIndexedMemory(
     metadata: input.metadata,
     createdAt: input.createdAt,
   });
-  await store.indexMemory(memory.id, memory.ownerId);
+  await store.indexItem(memory.id, memory.ownerId);
   return memory;
 }
 

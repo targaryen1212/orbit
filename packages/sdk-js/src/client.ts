@@ -1,16 +1,16 @@
 import type {
-  CreateOrbitMemoryRequest,
+  CreateOrbitItemRequest,
   OrbitEvidenceChunk,
   OrbitEvidenceSearchInput,
   OrbitExtensionAuthRevokeResult,
-  OrbitMemoryObject,
+  OrbitItem,
   OrbitQrAuthPollInput,
   OrbitQrAuthResult,
   OrbitQrAuthSession,
   OrbitQrAuthWaitOptions,
   CreateOrbitQrAuthSessionInput,
   OrbitSearchHit,
-  OrbitUserMemory,
+  OrbitUserFact,
 } from "./types.js";
 import { createOrbitBookmarksApi, type OrbitBookmarksApi } from "./bookmarks.js";
 
@@ -57,20 +57,20 @@ export class OrbitClient {
     });
   }
 
-  memories = {
-    create: (input: CreateOrbitMemoryRequest) =>
-      this.request<OrbitMemoryObject>("/memories", {
+  items = {
+    create: (input: CreateOrbitItemRequest) =>
+      this.request<OrbitItem>("/items", {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    get: (memoryId: string) =>
-      this.request<OrbitMemoryObject>(`/memories/${encodeURIComponent(memoryId)}`),
+    get: (itemId: string) =>
+      this.request<OrbitItem>(`/items/${encodeURIComponent(itemId)}`),
     list: (options: { limit?: number; cursor?: string } = {}) => {
       const params = new URLSearchParams();
       if (options.limit) params.set("limit", String(options.limit));
       if (options.cursor) params.set("cursor", options.cursor);
       const suffix = params.size > 0 ? `?${params.toString()}` : "";
-      return this.request<{ memories: OrbitMemoryObject[]; nextCursor?: string | null }>(`/memories${suffix}`);
+      return this.request<{ items: OrbitItem[]; nextCursor?: string | null }>(`/items${suffix}`);
     },
   };
 
@@ -82,10 +82,10 @@ export class OrbitClient {
       }),
   };
 
-  userMemories = {
-    list: () => this.request<{ memories: OrbitUserMemory[] }>("/user-memories"),
-    delete: (memoryId: string) =>
-      this.request<void>(`/user-memories/${encodeURIComponent(memoryId)}`, {
+  userFacts = {
+    list: () => this.request<{ facts: OrbitUserFact[] }>("/user-facts"),
+    delete: (factId: string) =>
+      this.request<void>(`/user-facts/${encodeURIComponent(factId)}`, {
         method: "DELETE",
       }),
   };

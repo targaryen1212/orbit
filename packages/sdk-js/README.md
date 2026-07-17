@@ -1,31 +1,22 @@
-# @orbit-memory/sdk
+# @orbb/orbit-sdk
 
-TypeScript SDK for Orbit, an open protocol for portable AI memory.
+TypeScript types and a small HTTP client for Orbit-compatible save services.
 
-The SDK includes:
+The package includes:
 
-- Protocol types.
-- A small HTTP client for Orbit-compatible APIs.
-- A local in-memory store for demos, tests, and adapter development.
-- A deterministic development embedding provider.
+- Request and response types.
+- `OrbitClient` for authenticated API calls.
+- Bookmark ingestion helpers for URLs, text, and local media.
+- QR sign-in helpers for browser extensions.
+- A local in-memory store for tests and examples.
 
-```ts
-import { LocalOrbitStore, createDeterministicEmbeddingProvider } from "@orbit-memory/sdk";
+Search indexing belongs to the service. The SDK does not create, store, return,
+or expose internal search-index data.
 
-const store = new LocalOrbitStore({
-  embeddingProvider: createDeterministicEmbeddingProvider(),
-});
-
-const memory = await store.putMemory({
-  ownerId: "user_raj",
-  source: { type: "text", text: "Quiet Tokyo cafe with late hours." },
-});
-
-await store.indexMemory(memory.id, memory.ownerId);
-```
+## Client setup
 
 ```ts
-import { OrbitClient } from "@orbit-memory/sdk";
+import { OrbitClient } from "@orbb/orbit-sdk";
 
 const client = new OrbitClient({
   baseUrl: "https://api.example.com",
@@ -33,12 +24,18 @@ const client = new OrbitClient({
 });
 ```
 
-Authenticated clients can save protocol memories through Orbit's bookmark
-ingestion workflow without constructing service-specific routes. Local media
-data is uploaded and finalized by the SDK before the bookmark is created.
+`OrbitClient` appends `/orbit/v1` by default and avoids duplicating it when the
+base URL already contains the protocol path. Use `apiPath: false` for fully
+custom routes, or pass a path such as `/content/v2`.
+
+## Saving content
+
+Authenticated clients can submit content through the bookmark ingestion API
+without constructing service-specific routes. The SDK uploads and finalizes
+local media before creating the bookmark.
 
 ```ts
-await client.bookmarks.createMemory({
+await client.bookmarks.createItem({
   source: { type: "url", url: "https://example.com/story", platform: "web" },
   title: "A useful story",
   privacy: { scope: "private" },
@@ -49,20 +46,18 @@ const existing = await client.bookmarks.findExistingUrls([
 ]);
 ```
 
-Bookmark and media writes include stable stage-specific idempotency keys. Set
-`metadata.idempotencyKey` when the caller already has a durable capture ID; it
-is used unchanged for the bookmark create. URL captures otherwise derive a
-stable key from their normalized request content. Reusing the same request
-object safely retries text and local-file captures while separate request
-objects remain separate captures.
+Bookmark and media writes use stable, stage-specific idempotency keys. If the
+caller has a durable capture ID, set `metadata.idempotencyKey`; otherwise URL
+captures derive one from normalized request content.
 
 Bookmark writes leave `category` unset so the Orbb processing pipeline can
-classify each saved item from its content instead of assigning a generic label.
+classify the item from its content.
 
-QR sign-in keeps the private code in a POST body. A completed QR session can
-deliver credentials once; later polls return `consumed` without a token. When
-signing out, revoke the authenticated extension session before clearing the
-local credential.
+## QR sign-in
+
+The private QR code is sent in a POST body. An authorized session delivers its
+credentials once; later polls return `consumed`. Revoke the server session
+before deleting the local credential during sign-out.
 
 ```ts
 const session = await client.auth.qr.create({
@@ -73,13 +68,23 @@ const result = await client.auth.qr.waitForAuthorization(session);
 await client.auth.revokeCurrentSession();
 ```
 
-`OrbitClient` appends `/orbit/v1` by default and avoids duplicating it when the
-base URL already includes the protocol path. Use `apiPath: false` for fully
-custom routes, or pass a custom `apiPath` such as `/memory/v2`.
+## Local store
 
-`OrbitStore.indexMemory` is part of the store interface because local adapters
-and tests need an explicit indexing step. Public HTTP adapters may index
-synchronously or asynchronously after create.
+`LocalOrbitStore` provides owner-scoped storage, evidence extraction, filters,
+and keyword search for tests. Production services may use any private search
+implementation as long as the public response matches the protocol.
 
-For public HTTP creates, `ownerId` is intentionally absent from the client DTO.
+```ts
+import { LocalOrbitStore } from "@orbb/orbit-sdk";
+
+const store = new LocalOrbitStore();
+const item = await store.putItem({
+  ownerId: "user_raj",
+  source: { type: "text", text: "Quiet Tokyo cafe with late hours." },
+});
+
+await store.indexItem(item.id, item.ownerId);
+```
+
+For public creates, `ownerId` is intentionally absent from the request type.
 Servers must bind ownership from the authenticated request context.

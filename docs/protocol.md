@@ -1,75 +1,54 @@
 # Orbit Protocol
 
-Orbit is spec-first. The protocol defines stable JSON shapes and operations;
-storage engines and AI providers are adapters.
+Orbit defines JSON request and response shapes. Authentication, persistence,
+content processing, and search implementation remain the service's
+responsibility.
 
-## Namespaces
+## Ownership
 
 All private reads and writes are scoped by `ownerId`.
 
-Public API adapters must derive `ownerId` from authenticated request context
-and ignore or reject caller-supplied owner identifiers. Local/offline stores may
-accept `ownerId` as an explicit namespace argument because they do not have an
-auth boundary.
+Public API adapters must derive `ownerId` from the authenticated request and
+reject caller-supplied owner identifiers. Local stores may accept `ownerId`
+explicitly because they do not have an authentication boundary.
 
 ```txt
 ownerId=user_raj
-  memories/
+  items/
   evidenceChunks/
-  userMemories/
+  userFacts/
   relations/
 ```
 
-Embeddings can live in a shared vector space when they use the same
-`embedding.model`, but search must apply the owner boundary first:
+Cross-user search is invalid unless an item has an explicit shared or public
+scope.
 
-```txt
-query embedding -> filter ownerId -> nearest evidence chunks
-```
+## Search
 
-## Embedding Rule
+The public contract contains saved content, searchable evidence, filters, and
+ranked results. Search indexes and provider-specific data stay behind the
+service boundary and are not included in SDK types, schemas, or API responses.
 
-Only compare vectors that use the same embedding model and dimensions.
+`EvidenceChunk` is the searchable unit. A saved item is convenient for display;
+smaller evidence records let a service return the exact text that matched.
 
-```json
-{
-  "model": "openai/text-embedding-3-large",
-  "dimensions": 3072,
-  "vector": [0.012, -0.44, 0.91]
-}
-```
+Evidence records may copy relevant entities, tags, and resources from their
+source item so clients can filter and display results without another request.
 
-Provider adapters may store vectors in Firestore, Postgres/pgvector, SQLite,
-Qdrant, LanceDB, or any equivalent vector index.
+## Privacy
 
-Search response DTOs should omit vectors by default. Adapters may expose vectors
-only behind an explicit `includeVectors` request flag for trusted debugging or
-export flows.
+Services must default saved content to private. They must apply
+`privacy.redaction` before adding evidence to any search index. Redaction values
+are source-field paths such as `summary`, `note`, `content.text`, or
+`content.transcript`; a parent path such as `content` redacts every child field.
 
-## Retrieval Rule
+The local JavaScript store enforces this by skipping evidence whose
+`sourceFields` match a redacted path.
 
-The canonical retrieval unit is `EvidenceChunk`, not the whole memory object.
-Memory objects are useful for display; evidence chunks are useful for answers.
+## Place coordinates
 
-Evidence chunks may copy relevant entities, tags, and resources from their
-source memory so retrieval systems can filter and display grounded context
-without fetching the full memory first.
-
-## Privacy Rule
-
-Orbit adapters must default to private memory. Cross-user search is invalid
-unless the memory has an explicit shared or public scope.
-
-Adapters must apply `privacy.redaction` before indexing evidence or generating
-embeddings. Redaction entries are source-field paths such as `summary`, `note`,
-`content.text`, or `content.transcript`; parent paths such as `content` redact
-all descendant fields. The JS local store implements this by skipping evidence
-chunks whose `sourceFields` match a redacted path.
-
-## Place Coordinates
-
-Place resources may carry first-class coordinates. Coordinates describe the
-place mentioned by a memory, not necessarily the user's capture location.
+Place resources may include coordinates. They describe the place mentioned in
+the saved item, not necessarily the user's capture location.
 
 ```json
 {
@@ -90,6 +69,5 @@ place mentioned by a memory, not necessarily the user's capture location.
 }
 ```
 
-The standalone JSON schema for this shape is
-`specs/schemas/orbit-resource.schema.json`; memory objects and evidence chunks
-both reference it.
+The standalone schema is `specs/schemas/orbit-resource.schema.json`. Saved
+items and evidence records both reference it.

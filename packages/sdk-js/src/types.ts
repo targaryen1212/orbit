@@ -13,7 +13,7 @@ export type OrbitSourceType =
   | "event";
 
 export type OrbitPrivacyScope = "private" | "shared" | "public";
-export type OrbitMemoryStatus = "pending" | "processing" | "completed" | "degraded" | "failed";
+export type OrbitItemStatus = "pending" | "processing" | "completed" | "degraded" | "failed";
 
 export interface OrbitSource {
   type: OrbitSourceType;
@@ -61,21 +61,21 @@ export interface OrbitResource {
   metadata?: Record<string, unknown>;
 }
 
-export interface OrbitMemoryContent {
+export interface OrbitItemContent {
   text?: string;
   caption?: string;
   transcript?: string;
 }
 
-export interface OrbitMemoryObject {
-  schemaVersion: "orbit.memory.v0";
+export interface OrbitItem {
+  schemaVersion: "orbit.item.v0";
   id: OrbitId;
   ownerId: OrbitId;
   title?: string | null;
   summary?: string | null;
   note?: string | null;
   source: OrbitSource;
-  content?: OrbitMemoryContent;
+  content?: OrbitItemContent;
   tags?: string[];
   entities?: OrbitEntitySet;
   resources?: OrbitResource[];
@@ -83,7 +83,7 @@ export interface OrbitMemoryObject {
     scope: OrbitPrivacyScope;
     redaction?: string[];
   };
-  status?: OrbitMemoryStatus;
+  status?: OrbitItemStatus;
   metadata?: Record<string, unknown>;
   createdAt: OrbitTimestamp;
   updatedAt?: OrbitTimestamp;
@@ -101,28 +101,20 @@ export type OrbitEvidenceKind =
   | "event"
   | "custom";
 
-export interface OrbitEmbedding {
-  model: string;
-  dimensions: number;
-  vector: number[];
-  normalized?: boolean;
-}
-
 export interface OrbitEvidenceChunk {
   schemaVersion: "orbit.evidence.v0";
   id: OrbitId;
   ownerId: OrbitId;
-  memoryId: OrbitId;
+  itemId: OrbitId;
   kind: OrbitEvidenceKind;
   text: string;
   sourceFields: string[];
-  embedding?: OrbitEmbedding;
   category?: string;
   tags?: string[];
   entities?: OrbitEntitySet;
   resources?: OrbitResource[];
   createdAt?: OrbitTimestamp;
-  memoryCreatedAt?: OrbitTimestamp;
+  itemCreatedAt?: OrbitTimestamp;
   metadata?: Record<string, unknown>;
 }
 
@@ -130,8 +122,8 @@ export interface OrbitRelation {
   schemaVersion: "orbit.relation.v0";
   id: OrbitId;
   ownerId: OrbitId;
-  fromMemoryId: OrbitId;
-  toMemoryId: OrbitId;
+  fromItemId: OrbitId;
+  toItemId: OrbitId;
   relationType: "semantic" | "entity" | "temporal" | "coactivation" | "manual" | "mixed";
   strength: number;
   signals: {
@@ -146,8 +138,8 @@ export interface OrbitRelation {
   metadata?: Record<string, unknown>;
 }
 
-export interface OrbitUserMemory {
-  schemaVersion: "orbit.user_memory.v0";
+export interface OrbitUserFact {
+  schemaVersion: "orbit.user_fact.v0";
   id: OrbitId;
   ownerId: OrbitId;
   content: string;
@@ -159,27 +151,27 @@ export interface OrbitUserMemory {
   metadata?: Record<string, unknown>;
 }
 
-export interface CreateOrbitMemoryInput {
+export interface CreateOrbitItemInput {
   ownerId: OrbitId;
   source: OrbitSource;
   title?: string | null;
   summary?: string | null;
   note?: string | null;
-  content?: OrbitMemoryContent;
+  content?: OrbitItemContent;
   tags?: string[];
   entities?: OrbitEntitySet;
   resources?: OrbitResource[];
-  privacy?: OrbitMemoryObject["privacy"];
-  status?: OrbitMemoryStatus;
+  privacy?: OrbitItem["privacy"];
+  status?: OrbitItemStatus;
   metadata?: Record<string, unknown>;
   id?: OrbitId;
   createdAt?: OrbitTimestamp;
 }
 
-export type CreateOrbitMemoryRequest = Omit<CreateOrbitMemoryInput, "ownerId" | "id" | "createdAt">;
+export type CreateOrbitItemRequest = Omit<CreateOrbitItemInput, "ownerId" | "id" | "createdAt">;
 
 export interface OrbitSearchFilters {
-  memoryIds?: OrbitId[];
+  itemIds?: OrbitId[];
   category?: string;
   tags?: string[];
   sourceTypes?: OrbitSourceType[];
@@ -193,13 +185,11 @@ export interface OrbitEvidenceSearchInput {
   query: string;
   filters?: OrbitSearchFilters;
   limit?: number;
-  includeVectors?: boolean;
 }
 
 export interface OrbitSearchHit<T> {
   item: T;
   score: number;
-  semanticScore?: number;
   keywordScore?: number;
 }
 
@@ -274,13 +264,13 @@ export interface OrbitQrAuthWaitOptions {
 }
 
 export interface OrbitStore {
-  putMemory(input: CreateOrbitMemoryInput | OrbitMemoryObject): Promise<OrbitMemoryObject>;
-  getMemory(memoryId: OrbitId, ownerId: OrbitId): Promise<OrbitMemoryObject | null>;
-  listMemories(ownerId: OrbitId, options?: { limit?: number }): Promise<OrbitMemoryObject[]>;
-  indexMemory(memoryId: OrbitId, ownerId: OrbitId): Promise<OrbitEvidenceChunk[]>;
+  putItem(input: CreateOrbitItemInput | OrbitItem): Promise<OrbitItem>;
+  getItem(itemId: OrbitId, ownerId: OrbitId): Promise<OrbitItem | null>;
+  listItems(ownerId: OrbitId, options?: { limit?: number }): Promise<OrbitItem[]>;
+  indexItem(itemId: OrbitId, ownerId: OrbitId): Promise<OrbitEvidenceChunk[]>;
   putEvidenceChunks(chunks: OrbitEvidenceChunk[]): Promise<OrbitEvidenceChunk[]>;
   searchEvidence(input: OrbitEvidenceSearchInput): Promise<Array<OrbitSearchHit<OrbitEvidenceChunk>>>;
-  upsertUserMemory(input: Omit<OrbitUserMemory, "schemaVersion" | "id" | "createdAt"> & { id?: OrbitId; createdAt?: OrbitTimestamp }): Promise<OrbitUserMemory>;
-  listUserMemories(ownerId: OrbitId, options?: { limit?: number }): Promise<OrbitUserMemory[]>;
-  deleteUserMemory(memoryId: OrbitId, ownerId: OrbitId): Promise<boolean>;
+  upsertUserFact(input: Omit<OrbitUserFact, "schemaVersion" | "id" | "createdAt"> & { id?: OrbitId; createdAt?: OrbitTimestamp }): Promise<OrbitUserFact>;
+  listUserFacts(ownerId: OrbitId, options?: { limit?: number }): Promise<OrbitUserFact[]>;
+  deleteUserFact(factId: OrbitId, ownerId: OrbitId): Promise<boolean>;
 }

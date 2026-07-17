@@ -1,34 +1,34 @@
 openapi: 3.1.0
 info:
-  title: Orbit Memory Protocol
-  version: 0.1.0
-  description: Open API surface for portable AI memory.
+  title: Orbit Saved Content API
+  version: 0.3.0
+  description: API contract for saving and retrieving user-owned content.
 servers:
   - url: https://api.example.com/orbit/v1
 security:
   - bearerAuth: []
 paths:
-  /memories:
+  /items:
     post:
-      operationId: createMemory
-      summary: Create a memory object.
+      operationId: createItem
+      summary: Create a saved item.
       description: The server binds owner identity from the bearer auth context; clients must not supply ownerId.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateMemoryRequest"
+              $ref: "#/components/schemas/CreateItemRequest"
       responses:
         "201":
-          description: Created memory.
+          description: Created item.
           content:
             application/json:
               schema:
-                $ref: ./schemas/orbit-memory.schema.json
+                $ref: ./schemas/orbit-item.schema.json
     get:
-      operationId: listMemories
-      summary: List memory objects in the authenticated user's namespace.
+      operationId: listItems
+      summary: List the authenticated user's saved items.
       parameters:
         - name: limit
           in: query
@@ -38,31 +38,31 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: Memory page.
+          description: Page of saved items.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ListMemoriesResponse"
-  /memories/{memoryId}:
+                $ref: "#/components/schemas/ListItemsResponse"
+  /items/{itemId}:
     get:
-      operationId: getMemory
-      summary: Get one memory object.
+      operationId: getItem
+      summary: Get one saved item.
       parameters:
-        - name: memoryId
+        - name: itemId
           in: path
           required: true
           schema: { type: string }
       responses:
         "200":
-          description: Memory object.
+          description: Saved item.
           content:
             application/json:
               schema:
-                $ref: ./schemas/orbit-memory.schema.json
+                $ref: ./schemas/orbit-item.schema.json
   /evidence/search:
     post:
       operationId: searchEvidence
-      summary: Search evidence chunks in the authenticated user's namespace.
+      summary: Search the authenticated user's saved content.
       requestBody:
         required: true
         content:
@@ -71,28 +71,28 @@ paths:
               $ref: "#/components/schemas/SearchEvidenceRequest"
       responses:
         "200":
-          description: Ranked evidence chunks.
+          description: Ranked matching evidence.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchEvidenceResponse"
-  /user-memories:
+  /user-facts:
     get:
-      operationId: listUserMemories
-      summary: List durable user memories.
+      operationId: listUserFacts
+      summary: List stored user facts and preferences.
       responses:
         "200":
-          description: User memories.
+          description: Stored user facts and preferences.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ListUserMemoriesResponse"
-  /user-memories/{memoryId}:
+                $ref: "#/components/schemas/ListUserFactsResponse"
+  /user-facts/{factId}:
     delete:
-      operationId: deleteUserMemory
-      summary: Delete a durable user memory.
+      operationId: deleteUserFact
+      summary: Delete a stored user fact or preference.
       parameters:
-        - name: memoryId
+        - name: factId
           in: path
           required: true
           schema: { type: string }
@@ -188,13 +188,13 @@ components:
   schemas:
     OrbitResource:
       $ref: ./schemas/orbit-resource.schema.json
-    OrbitMemoryObject:
-      $ref: ./schemas/orbit-memory.schema.json
+    OrbitItem:
+      $ref: ./schemas/orbit-item.schema.json
     OrbitEvidenceChunk:
       $ref: ./schemas/orbit-evidence.schema.json
-    OrbitUserMemory:
-      $ref: ./schemas/orbit-user-memory.schema.json
-    CreateMemoryRequest:
+    OrbitUserFact:
+      $ref: ./schemas/orbit-user-fact.schema.json
+    CreateItemRequest:
       type: object
       required: [source]
       additionalProperties: false
@@ -205,7 +205,7 @@ components:
         source:
           $ref: "#/components/schemas/OrbitSource"
         content:
-          $ref: "#/components/schemas/OrbitMemoryContent"
+          $ref: "#/components/schemas/OrbitItemContent"
         tags:
           type: array
           items: { type: string }
@@ -216,7 +216,7 @@ components:
           items:
             $ref: ./schemas/orbit-resource.schema.json
         privacy:
-          $ref: "#/components/schemas/OrbitMemoryPrivacy"
+          $ref: "#/components/schemas/OrbitItemPrivacy"
         status:
           type: string
           enum: [pending, processing, completed, degraded, failed]
@@ -239,7 +239,7 @@ components:
         raw:
           type: object
           additionalProperties: true
-    OrbitMemoryContent:
+    OrbitItemContent:
       type: object
       additionalProperties: false
       properties:
@@ -264,7 +264,7 @@ components:
         topics:
           type: array
           items: { type: string }
-    OrbitMemoryPrivacy:
+    OrbitItemPrivacy:
       type: object
       required: [scope]
       additionalProperties: false
@@ -275,26 +275,26 @@ components:
         redaction:
           type: array
           items: { type: string }
-    ListMemoriesResponse:
+    ListItemsResponse:
       type: object
-      required: [memories]
+      required: [items]
       additionalProperties: false
       properties:
-        memories:
+        items:
           type: array
           items:
-            $ref: ./schemas/orbit-memory.schema.json
+            $ref: ./schemas/orbit-item.schema.json
         nextCursor:
           type: [string, "null"]
-    ListUserMemoriesResponse:
+    ListUserFactsResponse:
       type: object
-      required: [memories]
+      required: [facts]
       additionalProperties: false
       properties:
-        memories:
+        facts:
           type: array
           items:
-            $ref: ./schemas/orbit-user-memory.schema.json
+            $ref: ./schemas/orbit-user-fact.schema.json
     SearchEvidenceRequest:
       type: object
       required: [query]
@@ -302,12 +302,11 @@ components:
       properties:
         query: { type: string, minLength: 1 }
         limit: { type: integer, minimum: 1, maximum: 50, default: 10 }
-        includeVectors: { type: boolean, default: false }
         filters:
           type: object
           additionalProperties: false
           properties:
-            memoryIds:
+            itemIds:
               type: array
               items: { type: string }
             category: { type: string }
@@ -341,7 +340,6 @@ components:
               item:
                 $ref: ./schemas/orbit-evidence.schema.json
               score: { type: number }
-              semanticScore: { type: number }
               keywordScore: { type: number }
     CreateQrAuthSessionRequest:
       type: object

@@ -1,39 +1,33 @@
 # Orbit
 
-Orbit is an open protocol for portable AI memory. It gives apps a common way
-to save, enrich, retrieve, and exchange personal context without locking memory
-inside one product.
+Orbit defines a common API for user-owned saved content. Apps can use the same
+schemas and client methods to save URLs, notes, media, and extracted details
+without depending on one service's database layout.
 
-Orbb can become the first polished app built on Orbit. The app stays private;
-the memory contract, SDK, and adapters can be open source.
+Orbb is the first production adapter. The Orbb app remains private while the
+data contract and SDK can be shared.
 
-## Core Idea
+## Data model
 
-Orbit separates five concepts:
-
-- `MemoryObject`: the thing a user saved, wrote, spoke, saw, or imported.
-- `EvidenceChunk`: the grounded retrieval unit used for semantic search and RAG.
-- `Entity`: people, places, organizations, and topics extracted from memory.
-- `Resource`: typed objects found inside memory, such as books, places, songs,
-  movies, products, apps, and courses.
-- `UserMemory`: durable facts or preferences about the user, separate from saved
+- `MemoryObject`: one saved item. The name is retained in the API for
+  compatibility.
+- `EvidenceChunk`: searchable text derived from a saved item.
+- `Entity`: a person, place, organization, or topic found in an item.
+- `Resource`: a structured item such as a book, place, song, movie, or product.
+- `UserFact`: a durable user fact or preference, kept separate from saved
   content.
 
-Every user can use the same embedding model, but vectors must be searched inside
-that user's namespace unless the user explicitly shares a memory.
+Every private read and write is scoped to its owner. Search implementations are
+service internals; raw index data is not part of the public contract.
 
-## Project Layout
+## Project layout
 
 ```txt
 orbit/
-  specs/
-    orbit-openapi.yaml
-    schemas/
-  packages/
-    sdk-js/
-  examples/
-    node-local-memory/
-  docs/
+  specs/                JSON schemas and OpenAPI definition
+  packages/sdk-js/      TypeScript client, types, and local test store
+  examples/             Runnable examples
+  docs/                 Protocol and adapter notes
 ```
 
 ## Quickstart
@@ -47,19 +41,14 @@ npm test
 npm run example:local
 ```
 
-## Example
+## Local example
 
 ```ts
-import {
-  LocalOrbitStore,
-  createDeterministicEmbeddingProvider,
-} from "@orbit-memory/sdk";
+import { LocalOrbitStore } from "@orbb/orbit-sdk";
 
-const store = new LocalOrbitStore({
-  embeddingProvider: createDeterministicEmbeddingProvider(),
-});
+const store = new LocalOrbitStore();
 
-const memory = await store.putMemory({
+const item = await store.putItem({
   ownerId: "user_raj",
   source: {
     type: "url",
@@ -67,43 +56,37 @@ const memory = await store.putMemory({
     platform: "web",
   },
   title: "Quiet Tokyo cafe",
-  summary: "A quiet cafe in Shimokitazawa with matcha lattes and late hours.",
+  summary: "A cafe in Shimokitazawa with matcha lattes and late hours.",
   tags: ["tokyo", "cafe", "travel"],
-  entities: {
-    places: ["Tokyo", "Shimokitazawa"],
-    topics: ["coffee", "quiet cafes"],
-  },
 });
 
-await store.indexMemory(memory.id, memory.ownerId);
+await store.indexItem(item.id, item.ownerId);
 
 const results = await store.searchEvidence({
   ownerId: "user_raj",
-  query: "quiet cafes in Tokyo",
+  query: "Tokyo cafe",
   limit: 5,
 });
 ```
 
-HTTP clients default to the protocol path:
+## HTTP client
 
 ```ts
-import { OrbitClient } from "@orbit-memory/sdk";
+import { OrbitClient } from "@orbb/orbit-sdk";
 
 const client = new OrbitClient({
   baseUrl: "https://api.example.com",
   apiKey: process.env.ORBIT_API_KEY,
 });
 
-// Requests https://api.example.com/orbit/v1/memories
-const { memories } = await client.memories.list();
+// Requests https://api.example.com/orbit/v1/items
+const { items } = await client.items.list();
 ```
 
-For public HTTP adapters, `ownerId` must come from the authenticated user
-context, not from caller-supplied JSON. The local in-memory store still accepts
-`ownerId` because it has no auth layer.
+Public services must derive `ownerId` from the authenticated request. The local
+store accepts it explicitly because it has no authentication layer.
 
 ## Status
 
-This is a seed project. The first production milestone is to expose Orbb's
-existing bookmark/evidence/resource/memory data through Orbit-compatible
-serializers and a `/orbit/v1` API.
+Orbit is an early contract built around Orbb's current save, search, and
+resource APIs.
