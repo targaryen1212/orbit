@@ -46,7 +46,7 @@ export class OrbitClient {
   constructor(config: OrbitClientConfig) {
     this.baseUrl = normalizeBaseUrl(config.baseUrl, config.apiPath);
     this.apiKey = config.apiKey;
-    this.fetchImpl = config.fetch ?? fetch;
+    this.fetchImpl = (config.fetch ?? globalThis.fetch).bind(globalThis);
     this.requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.clientVersion = config.client?.version;
     this.clientPlatform = config.client?.platform;

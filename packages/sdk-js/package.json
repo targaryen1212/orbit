@@ -1,6 +1,6 @@
 {
   "name": "@orbb/orbit-sdk",
-  "version": "0.3.0",
+  "version": "0.3.4",
   "description": "TypeScript client and types for Orbit saved-content APIs.",
   "license": "MIT",
   "type": "module",

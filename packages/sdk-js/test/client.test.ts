@@ -2,6 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { OrbitClient } from "../src/index.js";
 
+test("invokes fetch with the global runtime as its receiver", async () => {
+  let receiver: unknown;
+  const receiverSensitiveFetch = function (
+    this: unknown,
+    _input: RequestInfo | URL,
+    _init?: RequestInit,
+  ) {
+    receiver = this;
+    return Promise.resolve(Response.json({ items: [] }));
+  } as typeof fetch;
+  const client = new OrbitClient({
+    baseUrl: "https://api.example.com",
+    fetch: receiverSensitiveFetch,
+  });
+
+  await client.items.list();
+
+  assert.equal(receiver, globalThis);
+});
+
 test("bookmark ingestion keeps private V2 routes inside the SDK", async () => {
   const requests: Array<{ url: string; init: RequestInit }> = [];
   const client = new OrbitClient({
