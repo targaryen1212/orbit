@@ -1,9 +1,26 @@
 {
   "name": "@orbb/orbit-sdk",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "description": "TypeScript client and types for Orbit saved-content APIs.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/targaryen1212/orbit.git",
+    "directory": "packages/sdk-js"
+  },
+  "keywords": [
+    "orbit",
+    "orbb",
+    "bookmarks",
+    "saved-content",
+    "knowledge",
+    "sdk"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.17"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -19,6 +36,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "node --import tsx --test \"test/*.test.ts\"",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build && npm test"
   }
 }

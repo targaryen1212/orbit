@@ -1,15 +1,28 @@
-import type { CreateOrbitItemRequest } from "./types.js";
+import type { CreateOrbitItemRequest, OrbitBookmarkSaveResult } from "./types.js";
+import { orbitApiErrorFromResponse } from "./errors.js";
 
 const DEFAULT_UPLOAD_TIMEOUT_MS = 90_000;
 
 type JsonRequest = <T>(path: string, init: RequestInit) => Promise<T>;
 type TimedFetch = (input: RequestInfo | URL, init: RequestInit, timeoutMs: number) => Promise<Response>;
 
+export interface OrbitBookmarkCreateOptions {
+  /**
+   * Stable identity for this save so retries replay instead of duplicating.
+   * URL captures derive one automatically from normalized content; captures
+   * without a URL derive one from the request object's identity, which does
+   * NOT survive a process restart or a re-built request object — pass an
+   * explicit key whenever a retry may happen with a new object.
+   */
+  idempotencyKey?: string;
+  signal?: AbortSignal;
+}
+
 export interface OrbitBookmarksApi {
   /** Save content through Orbit's bookmark ingestion workflow. */
-  createItem(item: CreateOrbitItemRequest): Promise<unknown>;
+  createItem(item: CreateOrbitItemRequest, options?: OrbitBookmarkCreateOptions): Promise<OrbitBookmarkSaveResult>;
   /** Return canonical source URLs already stored by the authenticated user. */
-  findExistingUrls(urls: string[]): Promise<Set<string>>;
+  findExistingUrls(urls: string[], options?: { signal?: AbortSignal }): Promise<Set<string>>;
 }
 
 export function createOrbitBookmarksApi(config: {
@@ -33,10 +46,10 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
     private readonly uploadTimeoutMs: number,
   ) {}
 
-  async createItem(item: CreateOrbitItemRequest): Promise<unknown> {
-    const operationKey = await this.operationKey(item);
+  async createItem(item: CreateOrbitItemRequest, options: OrbitBookmarkCreateOptions = {}): Promise<OrbitBookmarkSaveResult> {
+    const operationKey = options.idempotencyKey?.trim() || await this.operationKey(item);
     const media = localMedia(item);
-    const primaryMediaId = media ? await this.uploadMedia(media, operationKey) : undefined;
+    const primaryMediaId = media ? await this.uploadMedia(media, operationKey, options.signal) : undefined;
     const sourceUrl = firstHttpUrl(item.source.url, stringMetadata(item.metadata, "sourcePageUrl"));
     const sourcePlatform = item.source.platform?.trim() || host(sourceUrl) || "orbit";
     const searchableText = [item.title, item.summary, item.note, item.content?.text, item.content?.caption]
@@ -44,8 +57,9 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
       .join("\n")
       .slice(0, 20_000);
 
-    return this.request("/bookmarks", {
+    return this.request<OrbitBookmarkSaveResult>("/bookmarks", {
       method: "POST",
+      signal: options.signal,
       headers: { "idempotency-key": operationKey },
       body: JSON.stringify(withoutUndefined({
         sourcePlatform,
@@ -102,12 +116,13 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
     return captureKey;
   }
 
-  async findExistingUrls(urls: string[]): Promise<Set<string>> {
+  async findExistingUrls(urls: string[], options: { signal?: AbortSignal } = {}): Promise<Set<string>> {
     const existing = new Set<string>();
     const uniqueUrls = [...new Set(urls)];
     for (let offset = 0; offset < uniqueUrls.length; offset += 400) {
       const response = await this.request<{ data: { existingUrls: string[] } }>("/bookmarks/existence", {
         method: "POST",
+        signal: options.signal,
         body: JSON.stringify({ urls: uniqueUrls.slice(offset, offset + 400) }),
       });
       for (const url of response.data.existingUrls) existing.add(url);
@@ -115,10 +130,11 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
     return existing;
   }
 
-  private async uploadMedia(media: LocalMedia, operationKey: string): Promise<string> {
+  private async uploadMedia(media: LocalMedia, operationKey: string, signal?: AbortSignal): Promise<string> {
     const clientRequestId = await stageKey(operationKey, "media");
     const upload = await this.request<{ data: { mediaObjectId: string; uploadUrl: string } }>("/media/upload-url", {
       method: "POST",
+      signal,
       headers: { "idempotency-key": await stageKey(operationKey, "upload") },
       body: JSON.stringify({
         role: media.role,
@@ -130,13 +146,15 @@ class OrbitBookmarksClient implements OrbitBookmarksApi {
     });
     const put = await this.fetch(upload.data.uploadUrl, {
       method: "PUT",
+      signal,
       headers: { "content-type": media.blob.type || "application/octet-stream" },
       body: media.blob,
     }, this.uploadTimeoutMs);
-    if (!put.ok) throw await responseError(put, "Orbit media upload failed");
+    if (!put.ok) throw await orbitApiErrorFromResponse(put, "Orbit media upload failed");
 
     await this.request("/media/finalize", {
       method: "POST",
+      signal,
       headers: { "idempotency-key": await stageKey(operationKey, "finalize") },
       body: JSON.stringify({ mediaObjectId: upload.data.mediaObjectId, slot: media.role, clientRequestId }),
     });
@@ -239,10 +257,13 @@ function defaultTitle(item: CreateOrbitItemRequest): string {
 }
 
 function withoutUndefined<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-async function responseError(response: Response, fallback: string): Promise<Error> {
-  const body = await response.json().catch(() => ({})) as { message?: string; error?: string };
-  return new Error(body.message || body.error || `${fallback} (${response.status})`);
+  if (Array.isArray(value)) return value.map(withoutUndefined) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .map(([key, entryValue]) => [key, withoutUndefined(entryValue)]),
+    ) as T;
+  }
+  return value;
 }

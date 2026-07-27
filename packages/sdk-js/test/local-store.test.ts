@@ -121,6 +121,63 @@ describe("LocalOrbitStore", () => {
     assert(noteResults.length > 0);
   });
 
+  it("deletes an item together with its derived evidence", async () => {
+    const store = new LocalOrbitStore();
+    const item = await putIndexedItem(store, {
+      ownerId: "user_raj",
+      title: "Tokyo cafe",
+      summary: "A quiet cafe in Shimokitazawa.",
+    });
+
+    const deleted = await store.deleteItem(item.id, item.ownerId);
+    const items = await store.listItems(item.ownerId);
+    const results = await store.searchEvidence({ ownerId: item.ownerId, query: "quiet cafe" });
+
+    assert.equal(deleted, true);
+    assert.deepEqual(items, []);
+    assert.deepEqual(results, []);
+  });
+
+  it("updates mutable fields and drops stale evidence until re-indexed", async () => {
+    const store = new LocalOrbitStore();
+    const item = await putIndexedItem(store, {
+      ownerId: "user_raj",
+      title: "Tokyo cafe",
+      summary: "A quiet cafe in Shimokitazawa.",
+    });
+
+    const updated = await store.updateItem(item.id, item.ownerId, {
+      note: "Visited last spring.",
+      tags: ["tokyo", "cafe"],
+    });
+    const staleResults = await store.searchEvidence({ ownerId: item.ownerId, query: "quiet cafe" });
+    await store.indexItem(item.id, item.ownerId);
+    const freshResults = await store.searchEvidence({ ownerId: item.ownerId, query: "visited spring" });
+
+    assert.equal(updated?.note, "Visited last spring.");
+    assert.deepEqual(updated?.tags, ["tokyo", "cafe"]);
+    assert.equal(updated?.title, "Tokyo cafe");
+    assert.deepEqual(staleResults, []);
+    assert(freshResults.length > 0);
+    assert.equal(await store.updateItem("missing", item.ownerId, { note: "x" }), null);
+  });
+
+  it("finds non-Latin content in local search", async () => {
+    const store = new LocalOrbitStore();
+    await putIndexedItem(store, {
+      ownerId: "user_raj",
+      title: "下北沢のカフェ",
+      summary: "下北沢にある静かなカフェで、抹茶ラテがおいしい。",
+    });
+
+    const results = await store.searchEvidence({
+      ownerId: "user_raj",
+      query: "静かなカフェ",
+    });
+
+    assert(results.length > 0);
+  });
+
 });
 
 describe("OrbitClient", () => {

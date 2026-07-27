@@ -1,6 +1,16 @@
 export { OrbitClient, normalizeOrbitBaseUrl } from "./client.js";
-export type { OrbitClientConfig } from "./client.js";
-export type { OrbitBookmarksApi } from "./bookmarks.js";
+export type {
+  OrbitClientConfig,
+  OrbitRequestOptions,
+  OrbitRetryConfig,
+} from "./client.js";
+export type { OrbitBookmarkCreateOptions, OrbitBookmarksApi } from "./bookmarks.js";
+export {
+  OrbitAbortError,
+  OrbitApiError,
+  OrbitError,
+  OrbitTimeoutError,
+} from "./errors.js";
 export {
   LocalOrbitStore,
   buildEvidenceChunks,
@@ -10,6 +20,7 @@ export type {
   CreateOrbitItemInput,
   CreateOrbitItemRequest,
   CreateOrbitQrAuthSessionInput,
+  OrbitBookmarkSaveResult,
   OrbitEntitySet,
   OrbitEvidenceChunk,
   OrbitEvidenceKind,
@@ -21,6 +32,8 @@ export type {
   OrbitItem,
   OrbitItemContent,
   OrbitItemStatus,
+  OrbitListItemsResponse,
+  OrbitListUserFactsResponse,
   OrbitQrAuthClientInfo,
   OrbitQrAuthPollInput,
   OrbitQrAuthResult,
@@ -38,4 +51,5 @@ export type {
   OrbitStore,
   OrbitTimestamp,
   OrbitUserFact,
+  UpdateOrbitItemRequest,
 } from "./types.js";

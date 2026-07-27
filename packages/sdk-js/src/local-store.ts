@@ -5,8 +5,10 @@ import type {
   OrbitEvidenceSearchInput,
   OrbitItem,
   OrbitSearchHit,
+  OrbitSourceType,
   OrbitStore,
   OrbitUserFact,
+  UpdateOrbitItemRequest,
 } from "./types.js";
 import { chunkText, createOrbitId, nowIso, stableHash, tokenize, uniqueStrings } from "./utils.js";
 
@@ -51,6 +53,32 @@ export class LocalOrbitStore implements OrbitStore {
     return [...this.bucket(this.items, ownerId).values()]
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit);
+  }
+
+  async updateItem(itemId: string, ownerId: string, patch: UpdateOrbitItemRequest): Promise<OrbitItem | null> {
+    const existing = await this.getItem(itemId, ownerId);
+    if (!existing) return null;
+    const updated: OrbitItem = {
+      ...existing,
+      ...(patch.title !== undefined ? { title: patch.title } : {}),
+      ...(patch.summary !== undefined ? { summary: patch.summary } : {}),
+      ...(patch.note !== undefined ? { note: patch.note } : {}),
+      ...(patch.tags !== undefined ? { tags: uniqueStrings(patch.tags) } : {}),
+      ...(patch.privacy !== undefined ? { privacy: patch.privacy } : {}),
+      ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
+      updatedAt: nowIso(),
+    };
+    this.bucket(this.items, ownerId).set(itemId, updated);
+    // Evidence derived from the old field values is stale (and may now be
+    // redacted); drop it so the caller re-indexes from the updated item.
+    this.deleteEvidenceForItem(itemId, ownerId);
+    return updated;
+  }
+
+  async deleteItem(itemId: string, ownerId: string): Promise<boolean> {
+    const removed = this.bucket(this.items, ownerId).delete(itemId);
+    this.deleteEvidenceForItem(itemId, ownerId);
+    return removed;
   }
 
   async indexItem(itemId: string, ownerId: string): Promise<OrbitEvidenceChunk[]> {
@@ -126,6 +154,13 @@ export class LocalOrbitStore implements OrbitStore {
     return this.bucket(this.userFacts, ownerId).delete(factId);
   }
 
+  private deleteEvidenceForItem(itemId: string, ownerId: string): void {
+    const chunks = this.bucket(this.evidenceChunks, ownerId);
+    for (const [chunkId, chunk] of chunks) {
+      if (chunk.itemId === itemId) chunks.delete(chunkId);
+    }
+  }
+
   private bucket<T>(store: OwnerBucket<T>, ownerId: string): Map<string, T> {
     const existing = store.get(ownerId);
     if (existing) return existing;
@@ -134,8 +169,8 @@ export class LocalOrbitStore implements OrbitStore {
     return next;
   }
 
-  private async sourceTypeLookup(ownerId: string): Promise<Map<string, string>> {
-    const lookup = new Map<string, string>();
+  private async sourceTypeLookup(ownerId: string): Promise<Map<string, OrbitSourceType>> {
+    const lookup = new Map<string, OrbitSourceType>();
     for (const item of await this.listItems(ownerId, { limit: Number.MAX_SAFE_INTEGER })) {
       lookup.set(item.id, item.source.type);
     }
@@ -145,7 +180,7 @@ export class LocalOrbitStore implements OrbitStore {
   private matchesFilters(
     chunk: OrbitEvidenceChunk,
     input: OrbitEvidenceSearchInput,
-    itemSourceType: Map<string, string>
+    itemSourceType: Map<string, OrbitSourceType>
   ): boolean {
     const filters = input.filters;
     if (!filters) return true;
@@ -153,7 +188,10 @@ export class LocalOrbitStore implements OrbitStore {
     if (filters.category && chunk.category !== filters.category) return false;
     if (filters.createdAfter && chunk.itemCreatedAt && chunk.itemCreatedAt < filters.createdAfter) return false;
     if (filters.createdBefore && chunk.itemCreatedAt && chunk.itemCreatedAt > filters.createdBefore) return false;
-    if (filters.sourceTypes && !filters.sourceTypes.includes(itemSourceType.get(chunk.itemId) as never)) return false;
+    if (filters.sourceTypes) {
+      const sourceType = itemSourceType.get(chunk.itemId);
+      if (!sourceType || !filters.sourceTypes.includes(sourceType)) return false;
+    }
     if (filters.tags) {
       const chunkTags = new Set(chunk.tags ?? []);
       if (!filters.tags.every((tag) => chunkTags.has(tag))) return false;

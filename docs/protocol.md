@@ -45,6 +45,34 @@ are source-field paths such as `summary`, `note`, `content.text`, or
 The local JavaScript store enforces this by skipping evidence whose
 `sourceFields` match a redacted path.
 
+## Item lifecycle
+
+Items support update and delete in addition to create, get, and list.
+
+Update (`PATCH /items/{itemId}`) accepts only client-owned fields: `title`,
+`summary`, `note`, `tags`, `privacy`, and `metadata`. Server-derived fields
+(`source`, `content`, `entities`, `resources`) are not client-writable. After
+an update, a service must rebuild or drop the item's derived evidence so
+search never returns text the update removed or newly redacted.
+
+Delete (`DELETE /items/{itemId}`) must remove the item and purge its evidence
+from every search index. User-owned content requires real deletion; retaining
+searchable derivatives of a deleted item violates the contract.
+
+## Errors and retries
+
+Errors use a JSON envelope with a machine-readable code:
+
+```json
+{ "error": { "code": "not_found", "message": "Item not found." } }
+```
+
+Write routes accept an `idempotency-key` header. A service must treat a
+repeated key as a replay of the original operation, not a new one, so clients
+can retry timeouts and 5xx responses safely. The reference SDK retries
+idempotent requests automatically with exponential backoff and honors
+`Retry-After` on 429 responses.
+
 ## Place coordinates
 
 Place resources may include coordinates. They describe the place mentioned in

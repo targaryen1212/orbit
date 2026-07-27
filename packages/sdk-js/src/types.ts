@@ -170,6 +170,39 @@ export interface CreateOrbitItemInput {
 
 export type CreateOrbitItemRequest = Omit<CreateOrbitItemInput, "ownerId" | "id" | "createdAt">;
 
+export interface UpdateOrbitItemRequest {
+  title?: string | null;
+  summary?: string | null;
+  note?: string | null;
+  tags?: string[];
+  privacy?: OrbitItem["privacy"];
+  metadata?: Record<string, unknown>;
+}
+
+export interface OrbitListItemsResponse {
+  items: OrbitItem[];
+  nextCursor?: string | null;
+}
+
+export interface OrbitListUserFactsResponse {
+  facts: OrbitUserFact[];
+  nextCursor?: string | null;
+}
+
+/**
+ * Response envelope from the bookmark ingestion route. The route is served by
+ * the private Orbb backend; only the fields listed here are contractual.
+ */
+export interface OrbitBookmarkSaveResult {
+  data?: {
+    id?: string;
+    bookmarkId?: string;
+    status?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface OrbitSearchFilters {
   itemIds?: OrbitId[];
   category?: string;
@@ -267,6 +300,8 @@ export interface OrbitStore {
   putItem(input: CreateOrbitItemInput | OrbitItem): Promise<OrbitItem>;
   getItem(itemId: OrbitId, ownerId: OrbitId): Promise<OrbitItem | null>;
   listItems(ownerId: OrbitId, options?: { limit?: number }): Promise<OrbitItem[]>;
+  updateItem(itemId: OrbitId, ownerId: OrbitId, patch: UpdateOrbitItemRequest): Promise<OrbitItem | null>;
+  deleteItem(itemId: OrbitId, ownerId: OrbitId): Promise<boolean>;
   indexItem(itemId: OrbitId, ownerId: OrbitId): Promise<OrbitEvidenceChunk[]>;
   putEvidenceChunks(chunks: OrbitEvidenceChunk[]): Promise<OrbitEvidenceChunk[]>;
   searchEvidence(input: OrbitEvidenceSearchInput): Promise<Array<OrbitSearchHit<OrbitEvidenceChunk>>>;

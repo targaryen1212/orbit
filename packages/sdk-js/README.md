@@ -119,11 +119,60 @@ note-only captures. Give notes their text in `source.text`, `content.text`, or
 both.
 
 Bookmark and media writes use stable, stage-specific idempotency keys. If the
-caller has a durable capture ID, set `metadata.idempotencyKey`; otherwise URL
-captures derive one from normalized request content.
+caller has a durable capture ID, pass it as the second argument:
+
+```ts
+await client.bookmarks.createItem(item, { idempotencyKey: "capture-123" });
+```
+
+URL captures derive a key automatically from normalized request content.
+Captures without a URL derive one from the request object's identity, which
+does not survive a process restart or a re-built request object — pass an
+explicit key whenever a retry may happen with a new object (for example after
+a service-worker restart). `metadata.idempotencyKey` remains supported for
+backward compatibility.
 
 Bookmark writes leave `category` unset so the Orbb processing pipeline can
 classify the item from its content.
+
+## Errors, timeouts, and retries
+
+Failed requests throw `OrbitApiError` carrying `status`, a machine-readable
+`code`, and the parsed response `body` (plus `isAuthError` and `isRateLimit`
+helpers). Timeouts throw `OrbitTimeoutError`; caller-initiated aborts throw
+`OrbitAbortError`. Every method accepts an `AbortSignal` through its options
+argument.
+
+Idempotent requests — GET/PUT/DELETE, or any request carrying an
+`idempotency-key` header, which includes all bookmark and media writes —
+automatically retry with exponential backoff on network errors, timeouts,
+408, 429, and 5xx responses. Configure with `retry` (or disable with
+`retry: false`):
+
+```ts
+const client = new OrbitClient({
+  baseUrl: "https://api.orbb.app/v2",
+  apiPath: false,
+  retry: { maxAttempts: 4, baseDelayMs: 500 },
+});
+```
+
+Long-lived clients can supply `apiKey` as a function; it is resolved on every
+request, so rotated tokens take effect without rebuilding the client.
+
+## Reading and maintaining items
+
+```ts
+for await (const item of client.items.iterate({ pageSize: 50 })) {
+  console.log(item.title);
+}
+
+await client.items.update(itemId, { note: "Revisit in spring." });
+await client.items.delete(itemId);
+```
+
+`items.*` follows the open Orbit protocol in `specs/orbit-openapi.yaml`;
+deployments may enable these routes progressively.
 
 ### Same-origin web proxies
 

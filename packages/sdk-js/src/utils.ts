@@ -28,20 +28,57 @@ export function uniqueStrings(values: Array<string | null | undefined>): string[
   return [...seen];
 }
 
+let wordSegmenter: Intl.Segmenter | null | undefined;
+
+function segmenter(): Intl.Segmenter | null {
+  if (wordSegmenter === undefined) {
+    wordSegmenter =
+      typeof Intl !== "undefined" && "Segmenter" in Intl
+        ? new Intl.Segmenter(undefined, { granularity: "word" })
+        : null;
+  }
+  return wordSegmenter;
+}
+
 export function tokenize(value: string): string[] {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((term) => term.length > 2);
+  const lower = value.toLowerCase();
+  const wordLike = segmenter();
+  if (!wordLike) {
+    return lower
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((term) => isSearchTerm(term));
+  }
+  const terms: string[] = [];
+  for (const part of wordLike.segment(lower)) {
+    if (!part.isWordLike) continue;
+    const term = part.segment.trim();
+    if (isSearchTerm(term)) terms.push(term);
+  }
+  return terms;
+}
+
+// Short ASCII terms are stop-word noise, but short non-ASCII terms (CJK
+// words are often one or two characters) carry meaning and must be kept.
+function isSearchTerm(term: string): boolean {
+  if (!term) return false;
+  return term.length > 2 || /[^\x00-\x7F]/.test(term);
 }
 
 export function chunkText(value: string, maxLength = 1400): string[] {
   const clean = value.replace(/\s+/g, " ").trim();
   if (!clean) return [];
   const chunks: string[] = [];
-  for (let start = 0; start < clean.length; start += maxLength) {
-    chunks.push(clean.slice(start, start + maxLength));
+  let start = 0;
+  while (start < clean.length) {
+    let end = Math.min(start + maxLength, clean.length);
+    if (end < clean.length) {
+      const lastSpace = clean.lastIndexOf(" ", end);
+      if (lastSpace > start + Math.floor(maxLength / 2)) end = lastSpace;
+    }
+    chunks.push(clean.slice(start, end).trim());
+    start = end;
+    while (clean[start] === " ") start += 1;
   }
   return chunks;
 }

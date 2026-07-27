@@ -1,8 +1,11 @@
 openapi: 3.1.0
 info:
   title: Orbit Saved Content API
-  version: 0.3.0
-  description: API contract for saving and retrieving user-owned content.
+  version: 0.4.0
+  description: |
+    API contract for saving and retrieving user-owned content.
+
+    Errors use a JSON envelope: `{ "error": { "code": string, "message": string } }`.
 servers:
   - url: https://api.example.com/orbit/v1
 security:
@@ -44,14 +47,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/ListItemsResponse"
   /items/{itemId}:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema: { type: string }
     get:
       operationId: getItem
       summary: Get one saved item.
-      parameters:
-        - name: itemId
-          in: path
-          required: true
-          schema: { type: string }
       responses:
         "200":
           description: Saved item.
@@ -59,6 +62,36 @@ paths:
             application/json:
               schema:
                 $ref: ./schemas/orbit-item.schema.json
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateItem
+      summary: Update mutable fields of a saved item.
+      description: Server-derived fields (source, content, entities, resources) are not client-writable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateItemRequest"
+      responses:
+        "200":
+          description: Updated item.
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/orbit-item.schema.json
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteItem
+      summary: Delete a saved item and its derived evidence.
+      description: Deletion must also remove the item's evidence from every search index.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFound"
   /evidence/search:
     post:
       operationId: searchEvidence
@@ -80,6 +113,13 @@ paths:
     get:
       operationId: listUserFacts
       summary: List stored user facts and preferences.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string }
       responses:
         "200":
           description: Stored user facts and preferences.
@@ -185,7 +225,41 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+  responses:
+    NotFound:
+      description: The requested record does not exist for the authenticated user.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
+    Error:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code: { type: string }
+            message: { type: string }
+    UpdateItemRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: [string, "null"] }
+        summary: { type: [string, "null"] }
+        note: { type: [string, "null"] }
+        tags:
+          type: array
+          items: { type: string }
+        privacy:
+          $ref: "#/components/schemas/OrbitItemPrivacy"
+        metadata:
+          type: object
+          additionalProperties: true
     OrbitResource:
       $ref: ./schemas/orbit-resource.schema.json
     OrbitItem:
@@ -295,6 +369,8 @@ components:
           type: array
           items:
             $ref: ./schemas/orbit-user-fact.schema.json
+        nextCursor:
+          type: [string, "null"]
     SearchEvidenceRequest:
       type: object
       required: [query]
